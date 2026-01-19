@@ -1,0 +1,2369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Football Lineup Builder</title>
+
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+
+  /* ---------- TABLE ---------- */
+  table { border-collapse: collapse; margin-bottom: 16px; }
+  th, td { border: 1px solid #333; padding: 6px; text-align: center; vertical-align: middle; }
+  th { background: #eee; }
+  .player-name { width: 180px; }
+
+  .green { background:#a8d5a2; }
+  .orange { background:#ffd580; }
+  .red { background:#ff8080; }
+
+  /* Controls */
+  .controls {
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+    padding:10px;
+    border:1px solid #333;
+    background:#fafafa;
+    margin: 10px 0 14px;
+  }
+  .controls label { display:flex; gap:6px; align-items:center; }
+  .controls small { opacity:.75; }
+
+  /* Name cell + prefs */
+  .name-cell { text-align:left; }
+  .pref-grid{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap:4px;
+    margin-top:6px;
+  }
+  .pref-grid select{
+    width:72px;
+    font-size:12px;
+  }
+
+  .avoid-input{
+    width:160px;
+    font-size:12px;
+  }
+
+  /* Preferred minutes input + buttons */
+  .pref-wrap{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    align-items:center;
+    justify-content:center;
+  }
+  .pref-wrap input[type="number"]{
+    width:70px;
+    text-align:center;
+  }
+  .pref-btns{
+    display:flex;
+    gap:4px;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .pref-btns button{
+    font-size:11px;
+    padding:2px 6px;
+    border:1px solid #333;
+    background:#fff;
+    cursor:pointer;
+  }
+  .pref-btns button:hover{ background:#f0f0f0; }
+  .pref-btns button.active{
+    background:#333;
+    color:#fff;
+  }
+
+  /* ---------- HALF PITCH (DEFENSIVE) ---------- */
+  #pitch-container {
+    position: relative;
+    width: 600px;
+    height: 460px; /* half pitch */
+    margin-top: 16px;
+  }
+
+  #pitch {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: url("https://drive.google.com/file/d/1T4mLhplGH6hZKuxbPEZnE5674LIs2vNe/view?usp=drive_link") center/cover no-repeat;
+  border: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+  /* Drag editing */
+  .shirt-wrap.editable { pointer-events: auto; cursor: grab; }
+  .drop-target { outline: 3px dashed rgba(255,255,255,0.85); outline-offset: -6px; border-radius: 12px; }
+  .drop-target.dragover { outline-color: #ffd580; background: rgba(255,213,128,0.15); }
+
+  /* ---------- SHIRTS ---------- */
+  .shirt-wrap {
+    position: absolute;
+    width: 86px;
+    height: 96px;
+    pointer-events: none; /* leave non-draggable */
+  }
+
+  .shirt-img { width: 100%; height: 100%; display: block; }
+
+  .shirt-name {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 36px;
+    bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-weight: 800;
+    font-size: 13px;
+    line-height: 1.05;
+    color: #111;
+    word-break: break-word;
+    overflow: hidden;
+    pointer-events: none;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.7);
+  }
+
+  /* ---------- BENCH ---------- */
+  #bench { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .bench-wrap { position: relative; width: 86px; height: 96px; }
+  .bench-wrap .shirt-name { top: 36px; bottom: 12px; left: 10px; right: 10px; font-size: 12px; }
+
+  /* ---------- OUTPUT ---------- */
+  .panel {
+    padding: 10px;
+    border: 1px solid #333;
+    margin: 12px 0;
+    background: #fafafa;
+  }
+  .panel h4 { margin: 0 0 8px 0; }
+
+  .warn { color: #a40000; font-weight: 700; }
+  .ok { color: #0a6a0a; font-weight: 700; }
+
+</style>
+</head>
+
+<body>
+  <h2>Football Lineup Builder</h2>
+
+  <h3>Paste Players (names only OR spreadsheet rows)</h3>
+  <p style="margin-top:-8px;opacity:.8">
+    Paste either: <code>Name</code> per line, or <code>Name TAB Pos1 TAB Pos2 TAB Pos3 TAB Pos4</code> (from Excel/Sheets).
+  </p>
+  <textarea id="playerPaste" rows="8" cols="60" placeholder="Ronnie	GK
+Jacob	CM	RM	ST	LM
+..."></textarea><br>
+  <button onclick="loadPlayers()">Load Players</button>
+
+  <div class="controls">
+    <button onclick="debugAutoFillSnapshot(); autoFillScheduleAware()">Auto-Fill (from Preferred + Positions)</button>
+<span id="autoFillStatus" style="margin-left:8px;font-weight:700;"></span>
+    <button onclick="clearMinutes()">Clear Minutes</button>
+
+    <label><input type="checkbox" id="autoBalance" checked> Auto-balance preferred to 720</label>
+    <label><input type="checkbox" id="preferKeepOnPitch" checked> Prefer fewer subs</label>
+    <label><input type="checkbox" id="useAvoid" checked> Avoid pairs (soft)</label>
+<label><input type="checkbox" id="softMinutes" checked> Allow ±10 min leeway</label>
+
+    <small>Tip: set GK by choosing GK in one of the 1st–4th dropdowns.</small>
+  </div>
+
+  <h3>Minutes Table</h3>
+  <div id="tableContainer"></div>
+
+  <button onclick="generateLineup()">Generate Starting Lineup</button>
+  <button onclick="generateFullSchedule()">Generate Full Match Schedule</button>
+
+  <div id="editorContainer"></div>
+<h3>Formation</h3>
+
+  <div id="pitch-container">
+    <div id="pitch">
+      <div class="halfway"></div>
+      <div class="centre-circle"></div>
+      <div class="penalty-box"></div>
+      <div class="six-yard-box"></div>
+      <div class="penalty-spot"></div>
+    </div>
+  </div>
+
+  <h3>Bench</h3>
+  <div id="bench"></div>
+
+  <div id="scheduleContainer" class="panel" style="display:none;"></div>
+  <div id="errorBox" class="panel" style="display:none;border:2px solid #a40000;background:#fff0f0;"></div>
+
+<script>
+
+ (function(){
+  function esc(s){
+    return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+  }
+  window.addEventListener("error", (e) => {
+    const box = document.getElementById("errorBox");
+    if (!box) { alert("Script error: " + (e?.message || e)); return; }
+    box.style.display = "block";
+    box.innerHTML =
+      `<h4 style="margin:0 0 6px 0;color:#a40000">Script error</h4>
+       <pre style="margin:0;text-align:left;white-space:pre-wrap">${esc(e?.error?.stack || e?.message || String(e))}</pre>`;
+  });
+
+  window.addEventListener("unhandledrejection", (e) => {
+    const box = document.getElementById("errorBox");
+    const msg = e?.reason?.stack || e?.reason?.message || String(e?.reason || e);
+    if (!box) { alert("Promise error: " + msg); return; }
+    box.style.display = "block";
+    box.innerHTML =
+      `<h4 style="margin:0 0 6px 0;color:#a40000">Script error</h4>
+       <pre style="margin:0;text-align:left;white-space:pre-wrap">${esc(msg)}</pre>`;
+  });
+})();
+
+  // ---- FAILSAFE: prevent drag-edit from ever crashing the page ----
+  // IMPORTANT: use window.* here, not a local `let scheduleEditActive`,
+  // otherwise `typeof scheduleEditActive` can throw a TDZ ReferenceError.
+  if (typeof window.scheduleEditActive === "undefined") window.scheduleEditActive = false;
+  if (typeof window.enableDragEditForCurrentPeriod !== "function") {
+    window.enableDragEditForCurrentPeriod = function(){ /* stub */ };
+  }
+
+  const positions = ["GK","LB","CB","RB","LM","CM","RM","ST"];
+  const slots = ["GK","LB","CB","RB","LM","CM_L","CM_R","RM","ST"];
+  const expected = {GK:80,LB:80,CB:80,RB:80,LM:80,CM:160,RM:80,ST:80};
+  const prefChoices = ["", "GK","LB","CB","RB","LM","CM","RM","ST"];
+  const quickPrefVals = [40,50,60,70,80];
+
+  const coords = {
+    GK:{x:257,y:350},
+    LB:{x:90, y:275},
+    CB:{x:257,y:275},
+    RB:{x:425,y:275},
+    LM:{x:90, y:170},
+    CM_L:{x:200,y:170},
+    CM_R:{x:315,y:170},
+    RM:{x:425,y:170},
+    ST:{x:257,y:6}
+  };
+
+  let players = [];
+  var scheduleEditActive = false;
+  var draggedPlayerName = null;
+
+  // --- Shirt SVGs (plain white + GK gold) ---
+  function makeShirtDataURI({ fill="#ffffff", stroke="#111111", collar="#e6e6e6" } = {}) {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="170" height="190" viewBox="0 0 170 190">
+        <defs>
+          <linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="${collar}"/>
+            <stop offset="0.25" stop-color="${fill}"/>
+            <stop offset="1" stop-color="${fill}"/>
+          </linearGradient>
+        </defs>
+        <path d="M18 46 L54 22 L72 48 L42 76 L12 64 Z"
+              fill="url(#g)" stroke="${stroke}" stroke-width="5" stroke-linejoin="round"/>
+        <path d="M152 46 L116 22 L98 48 L128 76 L158 64 Z"
+              fill="url(#g)" stroke="${stroke}" stroke-width="5" stroke-linejoin="round"/>
+        <path d="M54 22
+                 L72 48
+                 Q85 36 98 48
+                 L116 22
+                 L152 46
+                 L134 86
+                 L134 176
+                 Q85 184 36 176
+                 L36 86
+                 L18 46
+                 Z"
+              fill="url(#g)" stroke="${stroke}" stroke-width="5" stroke-linejoin="round"/>
+        <path d="M72 48
+                 Q85 30 98 48
+                 Q85 58 72 48 Z"
+              fill="${collar}" stroke="${stroke}" stroke-width="4" />
+      </svg>
+    `.trim();
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  }
+
+  const SHIRT_OUTFIELD = makeShirtDataURI({ fill:"#ffffff", stroke:"#111111", collar:"#ededed" });
+  const SHIRT_GK       = makeShirtDataURI({ fill:"#f3c623", stroke:"#111111", collar:"#ffe08a" });
+
+  function initMins(){
+    const m = {};
+    positions.forEach(pos => m[pos] = 0);
+    return m;
+  }
+function setAutoFillBusy(isBusy, msg=""){
+  const s = document.getElementById("autoFillStatus");
+  if (s) s.textContent = msg || (isBusy ? "Working…" : "");
+  document.body.style.cursor = isBusy ? "progress" : "";
+}
+function ensureTicksDemand(demand){
+  // demand should be ticks 0..8. If it looks like minutes, convert.
+  const vals = Object.values(demand || {});
+  const maxVal = vals.length ? Math.max(...vals.map(v => +v || 0)) : 0;
+
+  const out = {};
+  for (const [name, vRaw] of Object.entries(demand || {})){
+    const v = +vRaw || 0;
+    // If values are > 8, assume they are minutes and convert to ticks
+    out[name] = (maxVal > 8) ? Math.round(v / 10) : v;
+    // clamp to [0,8]
+    out[name] = Math.max(0, Math.min(8, out[name]));
+  }
+  return out;
+}
+function debugAutoFillSnapshot(){
+  const prefTicks = players.map(p => Math.max(0, Math.min(8, Math.round((p.preferred||0)/10))));
+  const totalTicks = prefTicks.reduce((a,b)=>a+b,0);
+
+  const gk = players.find(p => (p.prefs||[]).includes("GK"))?.name || "(none)";
+  const zero = players.filter((p,i)=>prefTicks[i]===0).map(p=>p.name);
+
+  const counts = {GK:0,LB:0,CB:0,RB:0,LM:0,CM:0,RM:0,ST:0};
+  for (const pos of Object.keys(counts)){
+    counts[pos] = players.filter(p => (p.prefs||[]).includes(pos)).length;
+  }
+
+  alert(
+    `Preferred total: ${totalTicks*10} mins (needs 720)\n` +
+    `GK pref found: ${gk}\n` +
+    `Players with 0 mins: ${zero.join(", ") || "none"}\n\n` +
+    `Coverage (players who can play pos):\n` +
+    Object.entries(counts).map(([k,v])=>`${k}: ${v}`).join("\n")
+  );
+}
+
+  // Normalize common pos variants
+  function normalizePos(p){
+    if (!p) return "";
+    const x = p.toUpperCase().replace(/\s+/g,"");
+    const map = {
+      "GOALKEEPER":"GK","KEEPER":"GK",
+      "LEFTBACK":"LB",
+      "CENTERBACK":"CB","CENTREBACK":"CB",
+      "RIGHTBACK":"RB",
+      "LEFTMID":"LM","LW":"LM",
+      "CENTREMID":"CM","CENTERMID":"CM",
+      "RIGHTMID":"RM","RW":"RM",
+      "STRIKER":"ST","CF":"ST"
+    };
+    if (map[x]) return map[x];
+    return positions.includes(x) ? x : "";
+  }
+
+  // ---------------- Spreadsheet-aware loadPlayers ----------------
+  function loadPlayers(){
+    const raw = document.getElementById("playerPaste").value.trim();
+    if (!raw) return;
+
+    players = raw
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const cells = line.includes("\t") ? line.split("\t")
+                    : line.includes(",") ? line.split(",")
+                    : [line];
+
+        const name = (cells[0] || "").trim();
+        if (!name) return null;
+
+        const prefs = [1,2,3,4].map(i => normalizePos((cells[i] || "").trim()));
+
+        return {
+          name,
+          preferred: 80,
+          mins: initMins(),
+          prefs,     // 4 dropdown slots
+          avoid: ""
+        };
+      })
+      .filter(Boolean);
+
+    renderTable();
+  }
+
+  // ---------------- Pref dropdown helpers ----------------
+  function prefOptions(selected){
+    return prefChoices.map(o => {
+      const label = (o === "") ? "—" : o;
+      return `<option value="${o}" ${o===selected ? "selected" : ""}>${label}</option>`;
+    }).join("");
+  }
+
+  function setPref(i, k, val){
+    const p = players[i];
+    if (!p.prefs) p.prefs = ["","","",""];
+    p.prefs[k] = val;
+
+    // Prevent duplicates by clearing later duplicates (no swapping)
+    if (val) {
+      for (let j=0;j<p.prefs.length;j++){
+        if (j !== k && p.prefs[j] === val) p.prefs[j] = "";
+      }
+    }
+    renderTable();
+  }
+
+  function round10(n){
+    if (!Number.isFinite(n)) return 0;
+    n = Math.max(0, Math.min(80, n));
+    return Math.round(n/10)*10;
+  }
+
+  function setPreferred(i, val){
+    players[i].preferred = round10(val);
+    syncPrefQuickUI(i);
+    updateTotals();
+  }
+
+  function setPreferredFromInput(i, val){
+    players[i].preferred = round10(+val);
+    syncPrefQuickUI(i);
+    updateTotals();
+  }
+
+  function syncPrefQuickUI(i){
+    const v = players[i].preferred;
+
+    const inp = document.getElementById("prefInput" + i);
+    if (inp) inp.value = v;
+
+    document
+      .querySelectorAll(`.pref-quick[data-player="${i}"]`)
+      .forEach(btn => btn.classList.toggle("active", +btn.dataset.val === v));
+  }
+
+  // ---------------- TABLE ----------------
+  function renderTable(){
+    let html = "<table><tr><th>Player</th><th>Pref</th><th>Avoid With</th>";
+    positions.forEach(p => html += `<th>${p}</th>`);
+    html += "<th>Total</th></tr>";
+
+    players.forEach((p,i) => {
+      html += `<tr>
+        <td class="name-cell">
+          <input class="player-name" value="${escapeHtml(p.name)}"
+                 onchange="players[${i}].name=this.value">
+          <div class="pref-grid">
+            ${[0,1,2,3].map(k => `
+              <select onchange="setPref(${i},${k},this.value)">
+                ${prefOptions(players[i].prefs?.[k] || "")}
+              </select>
+            `).join("")}
+          </div>
+        </td>
+
+        <td>
+          <div class="pref-wrap">
+            <input id="prefInput${i}" type="number" min="0" max="80" step="10" value="${p.preferred}"
+              onchange="setPreferredFromInput(${i}, this.value)">
+            <div class="pref-btns">
+              ${quickPrefVals.map(v => `
+                <button
+                  type="button"
+                  class="pref-quick ${p.preferred===v ? "active" : ""}"
+                  data-player="${i}"
+                  data-val="${v}"
+                  onclick="setPreferred(${i},${v})"
+                >${v}</button>
+              `).join("")}
+            </div>
+          </div>
+        </td>
+
+        <td>
+          <input class="avoid-input" placeholder="e.g. Bear, Jacob"
+                 value="${escapeHtml(p.avoid || "")}"
+                 onchange="players[${i}].avoid=this.value;">
+        </td>`;
+
+      positions.forEach(pos => {
+        const current = p.mins[pos] ?? 0;
+        html += `<td>
+          <select onchange="players[${i}].mins['${pos}']=+this.value;updateTotals()">` +
+            [0,10,20,30,40,50,60,70,80].map(v =>
+              `<option value="${v}" ${v===current ? "selected" : ""}>${v}</option>`
+            ).join("") +
+          `</select>
+        </td>`;
+      });
+
+      html += `<td id="row${i}">0</td></tr>`;
+    });
+
+    html += `<tr>
+      <td><b>Totals</b></td>
+      <td id="prefTotal"></td>
+      <td></td>`;
+    positions.forEach(p => html += `<td id="col${p}"></td>`);
+    html += `<td id="grandTotal"></td></tr></table>`;
+
+    document.getElementById("tableContainer").innerHTML = html;
+    updateTotals();
+  }
+
+  function updateTotals(){
+    let pref = 0, grand = 0;
+    const col = {};
+    positions.forEach(p => col[p] = 0);
+
+    players.forEach((p,i) => {
+      let sum = 0;
+      positions.forEach(pos => {
+        const v = p.mins[pos] || 0;
+        sum += v;
+        col[pos] += v;
+      });
+
+      const row = document.getElementById("row"+i);
+      row.innerText = sum;
+
+      // row total colouring: NOT green on 0
+      row.className = "";
+      if (sum === 0) row.className = "";
+      else if (sum > p.preferred + 10) row.className = "red";
+      else if (sum > p.preferred) row.className = "orange";
+      else row.className = "green";
+
+      pref += (p.preferred || 0);
+      grand += sum;
+    });
+
+    positions.forEach(p => {
+      const td = document.getElementById("col"+p);
+      td.innerText = col[p];
+      const d = Math.abs(col[p] - expected[p]);
+      td.className = (d === 0) ? "green" : (d <= 20) ? "orange" : "red";
+    });
+
+    document.getElementById("prefTotal").innerText = pref;
+
+    const gt = document.getElementById("grandTotal");
+    gt.innerText = grand;
+    const targetGrand = 720;
+    const diff = Math.abs(grand - targetGrand);
+    gt.className = (diff === 0) ? "green" : (diff <= 20) ? "orange" : "red";
+  }
+
+  function clearMinutes(){
+    players.forEach(p => { p.mins = initMins(); });
+    renderTable();
+  }
+
+  // ---------------- AVOID PAIRS ----------------
+  function buildAvoidMap(){
+    const map = {};
+    const allNames = new Set(players.map(p=>p.name.trim()).filter(Boolean));
+    players.forEach(p => {
+      const base = p.name.trim();
+      const raw = (p.avoid || "").split(",").map(s=>s.trim()).filter(Boolean);
+      const filtered = raw.filter(n => allNames.has(n) && n !== base);
+      map[base] = new Set(filtered);
+    });
+    return map;
+  }
+
+  // ---------------- STARTING LINEUP (simple: best minutes per slot) ----------------
+  function pickStartingXIFromMinutes() {
+    const used = new Set();
+    const chosen = {};
+
+    function bestForPos(posKey) {
+      const cands = players
+        .map(pl => ({ pl, m: (pl.mins[posKey] || 0) }))
+        .filter(x => x.m > 0 && !used.has(x.pl))
+        .sort((a,b) => (b.m - a.m) || a.pl.name.localeCompare(b.pl.name));
+      return cands.length ? cands[0].pl : null;
+    }
+
+    const gk = bestForPos("GK");
+    chosen["GK"] = gk; if (gk) used.add(gk);
+
+    ["LB","CB","RB","LM","RM","ST"].forEach(slot => {
+      const p = bestForPos(slot);
+      chosen[slot] = p;
+      if (p) used.add(p);
+    });
+
+    const cmCands = players
+      .map(pl => ({ pl, m: (pl.mins["CM"] || 0) }))
+      .filter(x => x.m > 0 && !used.has(x.pl))
+      .sort((a,b) => (b.m - a.m) || a.pl.name.localeCompare(b.pl.name))
+      .map(x => x.pl);
+
+    chosen["CM_L"] = cmCands[0] || null;
+    chosen["CM_R"] = cmCands[1] || null;
+
+    return chosen;
+  }
+
+  function generateLineup(){
+    document.querySelectorAll(".shirt-wrap").forEach(n => n.remove());
+    document.getElementById("bench").innerHTML = "";
+
+    const chosen = pickStartingXIFromMinutes();
+    const usedNames = new Set(Object.values(chosen).filter(Boolean).map(p => p.name));
+
+    slots.forEach(slot => {
+      const p = chosen[slot];
+      if (!p) return;
+      const isGK = slot === "GK";
+      const el = makeShirtEl(p, isGK);
+      el.style.left = coords[slot].x + "px";
+      el.style.top  = coords[slot].y + "px";
+      document.getElementById("pitch-container").appendChild(el);
+      requestAnimationFrame(() => fitTextToBox(el.querySelector(".shirt-name"), 66, 42, 14, 9));
+    });
+
+    players.filter(p => !usedNames.has(p.name)).forEach(p => {
+      const wrap = document.createElement("div");
+      wrap.className = "bench-wrap";
+      const el = makeShirtEl(p, false);
+      el.style.position = "relative";
+      el.style.left = "0px";
+      el.style.top = "0px";
+      wrap.appendChild(el);
+      document.getElementById("bench").appendChild(wrap);
+      requestAnimationFrame(() => fitTextToBox(el.querySelector(".shirt-name"), 66, 42, 13, 9));
+    });
+  }
+
+  // ---------------- AUTO-FILL (Schedule-aware from Pref + Preferred) ----------------
+  function pickBestGKCandidateFromPrefs(totalDemand){
+    const ranked = [];
+    players.forEach(p => {
+      const r = (p.prefs || []).indexOf("GK"); // 0..3 or -1
+      if (r !== -1) ranked.push({ name:p.name, rank:r, rem: totalDemand[p.name] || 0 });
+    });
+    ranked.sort((a,b) => (a.rank-b.rank) || (b.rem-a.rem) || a.name.localeCompare(b.name));
+    return ranked.length ? ranked[0].name : null;
+  }
+
+  function bestRoomIndex(arr, dir, skipIdx){
+    let best = -1;
+    if (dir > 0) {
+      let minVal = Infinity;
+      for (let i=0;i<arr.length;i++){
+        if (i===skipIdx) continue;
+        if (arr[i] < 8 && arr[i] < minVal) { minVal = arr[i]; best = i; }
+      }
+    } else {
+      let maxVal = -Infinity;
+      for (let i=0;i<arr.length;i++){
+        if (i===skipIdx) continue;
+        if (arr[i] > 0 && arr[i] > maxVal) { maxVal = arr[i]; best = i; }
+      }
+    }
+    return best;
+  }
+function autoFillScheduleAware(){
+  setAutoFillBusy(true, "Working…");
+  // Let the browser repaint before heavy work
+  setTimeout(() => {
+    try {
+      autoFillScheduleAware_impl();
+    } catch (e) {
+      console.error(e);
+      alert("Auto-Fill crashed: " + (e?.message || e));
+    } finally {
+      setAutoFillBusy(false, "");
+    }
+  }, 0);
+}
+
+  function autoFillScheduleAware_impl(){
+    const doBalance = document.getElementById("autoBalance").checked;
+    const useAvoid = document.getElementById("useAvoid").checked;
+
+    const targetTotalTicks = 72; // 9 slots * 8 ticks
+
+    // 1) ticks from preferred
+    let prefTicks = players.map(p => Math.max(0, Math.min(8, Math.round((p.preferred || 0)/10))));
+
+    // 2) choose GK BEFORE balancing
+    const previewDemand = {};
+    players.forEach((p,i)=>previewDemand[p.name]=prefTicks[i]);
+    const gkName = pickBestGKCandidateFromPrefs(previewDemand);
+    if (!gkName){
+      alert("Auto-Fill: No GK preference found. Set someone’s 1st–4th choice to GK.");
+      return;
+    }
+
+    const gkIdx = players.findIndex(p=>p.name===gkName);
+
+    // Guarantee 8 ticks for GK if preferred is 80
+    if ((players[gkIdx]?.preferred || 0) >= 80) prefTicks[gkIdx] = 8;
+
+    // 3) balance others to total 72, keeping GK fixed
+    if (doBalance) {
+      const gkFixed = prefTicks[gkIdx];
+      const otherTarget = Math.max(0, targetTotalTicks - gkFixed);
+
+      const others = prefTicks.map((t,i)=> i===gkIdx ? 0 : t);
+      const otherSum = others.reduce((a,b)=>a+b,0);
+
+      let scaledOthers = others.slice();
+      if (otherSum > 0) {
+        const scale = otherTarget / otherSum;
+        scaledOthers = scaledOthers.map(t => Math.max(0, Math.min(8, Math.round(t*scale))));
+      }
+
+      // fix rounding drift
+      let drift = scaledOthers.reduce((a,b)=>a+b,0) - otherTarget;
+      while (drift > 0) {
+        const idx = bestRoomIndex(scaledOthers, -1, gkIdx);
+        if (idx === -1) break;
+        scaledOthers[idx] -= 1;
+        drift -= 1;
+      }
+      while (drift < 0) {
+        const idx = bestRoomIndex(scaledOthers, +1, gkIdx);
+        if (idx === -1) break;
+        scaledOthers[idx] += 1;
+        drift += 1;
+      }
+
+      prefTicks = scaledOthers.map((t,i)=> i===gkIdx ? gkFixed : t);
+      players.forEach((p,i)=> p.preferred = prefTicks[i]*10);
+    }
+
+    const totalDemand = {};
+    players.forEach((p,i)=> totalDemand[p.name] = prefTicks[i]);
+
+    if ((totalDemand[gkName] || 0) < 8){
+      alert(`Auto-Fill: GK is locked for 80 mins, but ${gkName} only has ${(totalDemand[gkName]||0)*10} preferred mins.\nSet GK preferred to 80 or enable Auto-balance.`);
+      return;
+    }
+
+    // Prefer 20-min blocks first
+    const segments20 = [
+      { start:0, end:20, tickLen:2 },
+      { start:20, end:40, tickLen:2 },
+      { start:40, end:60, tickLen:2 },
+      { start:60, end:80, tickLen:2 },
+    ];
+
+const avoidMap = buildAvoidMap();
+const useSoft = false; // force exact solver for now
+const slackTicks = 1; // ±10 minutes
+
+// IMPORTANT: soft solver expects TICKS (0..8), not minutes.
+const tickDemand = ensureTicksDemand(totalDemand);
+const sumTicks = Object.values(tickDemand).reduce((a,b)=>a+(+b||0),0);
+console.log("tickDemand", tickDemand, "sumTicks", sumTicks);
+
+let attempt;
+
+if (useSoft){
+  attempt = searchScheduleFromPrefsSoft(segments20, tickDemand, gkName, avoidMap, useAvoid, slackTicks);
+
+  if (!attempt.ok){
+    const segments10 = Array.from({length:8}, (_,i)=>({ start:i*10, end:(i+1)*10, tickLen:1 }));
+    attempt = searchScheduleFromPrefsSoft(segments10, tickDemand, gkName, avoidMap, useAvoid, slackTicks);
+  }
+} else {
+  attempt = searchScheduleFromPrefs(segments20, {...tickDemand}, gkName, avoidMap, useAvoid);
+
+  if (!attempt.ok){
+    const segments10 = Array.from({length:8}, (_,i)=>({ start:i*10, end:(i+1)*10, tickLen:1 }));
+    attempt = searchScheduleFromPrefs(segments10, {...tickDemand}, gkName, avoidMap, useAvoid);
+  }
+}
+
+if (!attempt.ok){
+  alert("Auto-Fill couldn't find a schedule.\n\n" + attempt.reason);
+  return;
+}
+
+if (!attempt.ok){
+  alert("Auto-Fill couldn't find a schedule.\n\n" + attempt.reason);
+  return;
+}
+
+
+    if (!attempt.ok){
+      alert(
+        "Auto-Fill couldn't find a schedule from preferences.\n\n" +
+        "Tip: add more 2nd/3rd/4th positions (especially CM) or loosen avoid pairs.\n\n" +
+        attempt.reason
+      );
+      return;
+    }
+
+    // Build minutes table from schedule
+    players.forEach(p => p.mins = initMins());
+    const gkPlayer = players.find(p=>p.name===gkName);
+    if (gkPlayer) gkPlayer.mins["GK"] = 80;
+
+    for (const seg of attempt.schedule){
+      for (const slot of slots){
+        if (slot === "GK") continue;
+        const name = seg.lineup[slot];
+        const pos = slot.startsWith("CM") ? "CM" : slot;
+        const pl = players.find(x=>x.name===name);
+        if (pl) pl.mins[pos] += seg.tickLen*10;
+      }
+    }
+
+    renderTable();
+  }
+
+  function rankOf(playerName, pos){
+    const p = players.find(x=>x.name===playerName);
+    if (!p || !p.prefs) return 999;
+    const r = p.prefs.indexOf(pos);
+    return r === -1 ? 999 : r;
+  }
+function searchScheduleFromPrefs(segments, totalDemand, gkName, avoidMap, useAvoid){
+  // Exact tick solver with memo + feasibility pruning.
+  const schedule = [];
+  let best = null;
+
+  const t0 = performance.now();
+  const MAX_MS = 8000; // hard cap but generous enough to find exact solutions
+  let timedOut = false;
+
+  function timeUp(){
+    if (timedOut) return true;
+    if (performance.now() - t0 > MAX_MS) { timedOut = true; return true; }
+    return false;
+  }
+
+  // Stable player order for memo keys
+  const names = players.map(p=>p.name);
+const idxOfName = new Map(names.map((n,i)=>[n,i]));
+  const idxOf = new Map(names.map((n,i)=>[n,i]));
+
+  // Precompute remaining ticks per recursion depth
+  const remTicksFrom = [];
+  for (let i=0;i<=segments.length;i++){
+    let s = 0;
+    for (let j=i;j<segments.length;j++) s += segments[j].tickLen;
+    remTicksFrom[i] = s;
+  }
+
+  function sumDemand(d){
+    let s = 0;
+    for (const n of names){
+      if (n === gkName) continue;
+      s += (d[n]||0);
+    }
+    return s;
+  }
+
+  // Must match exactly: each segment consumes (8 outfield slots) * tickLen
+  function requiredOutfieldTicksFrom(i){
+    return remTicksFrom[i] * 8;
+  }
+
+  function demandKey(d){
+    // key in player order (including GK value for safety)
+    return names.map(n => d[n]||0).join(",");
+  }
+
+  function lineupKey(lineup){
+    if (!lineup) return "";
+    return slots.map(s => lineup[s] || "").join("|");
+  }
+
+  function rankWeight(r){
+    // strong preference for 1st choice
+    return (r===0?0 : r===1?3 : r===2?9 : r===3?18 : 999);
+  }
+
+  function avoidPenalty(lineup){
+    if (!useAvoid) return 0;
+    const on = new Set(Object.values(lineup));
+    on.delete(gkName);
+    let pairs = 0;
+    for (const a of on){
+      const s = avoidMap[a];
+      if (!s) continue;
+      for (const b of s) if (on.has(b)) pairs++;
+    }
+    return Math.floor(pairs/2);
+  }
+
+  // Generate K candidate lineups for one segment (exactly 9 distinct players) sorted by a cost
+  function solveSegmentTopK(seg, demand, prevLineup, K=900){
+    const keepOn = document.getElementById("preferKeepOnPitch").checked;
+
+    const prevOn = new Set();
+    if (prevLineup) for (const s of slots) if (s!=="GK") prevOn.add(prevLineup[s]);
+
+    const prevCM = new Set();
+    if (prevLineup){
+      if (prevLineup["CM_L"]) prevCM.add(prevLineup["CM_L"]);
+      if (prevLineup["CM_R"]) prevCM.add(prevLineup["CM_R"]);
+    }
+
+    const cand = {};
+    for (const slot of slots){
+      if (slot === "GK") { cand[slot] = [gkName]; continue; }
+
+      const pos = slot.startsWith("CM") ? "CM" : slot;
+      const prevSame = prevLineup ? prevLineup[slot] : null;
+
+      const list = [];
+      for (const p of players){
+        const name = p.name;
+        if (name === gkName) continue;
+        if ((demand[name] || 0) < seg.tickLen) continue;
+        if (rankOf(name, pos) === 999) continue;
+        list.push(name);
+      }
+
+      // Sort: same slot, CM stability, keep on pitch, higher remaining demand, then rank
+      list.sort((a,b)=>{
+        const aSame = (a===prevSame)?0:1;
+        const bSame = (b===prevSame)?0:1;
+        if (aSame!==bSame) return aSame-bSame;
+
+        if (slot.startsWith("CM") && prevLineup){
+          const aIn = prevCM.has(a)?0:1;
+          const bIn = prevCM.has(b)?0:1;
+          if (aIn!==bIn) return aIn-bIn;
+        }
+
+        if (keepOn && prevLineup){
+          const aOn = prevOn.has(a)?0:1;
+          const bOn = prevOn.has(b)?0:1;
+          if (aOn!==bOn) return aOn-bOn;
+        }
+
+        const da = demand[a] || 0;
+        const db = demand[b] || 0;
+        if (da!==db) return db-da;
+
+        const ra = rankOf(a,pos), rb = rankOf(b,pos);
+        if (ra!==rb) return ra-rb;
+
+        return a.localeCompare(b);
+      });
+
+      // Don’t cut too hard; but keep it bounded to prevent explosion
+      cand[slot] = list.slice(0, Math.min(players.length, 12));
+      if (!cand[slot].length) return [];
+    }
+
+    const order = [...slots].sort((a,b)=>cand[a].length - cand[b].length);
+    const used = new Set();
+    const lineup = {};
+    const results = [];
+
+    function score(slot, name){
+      if (!prevLineup || slot==="GK") return 0;
+
+      const wasOn = prevOn.has(name);
+      const sameSlot = (prevLineup[slot]===name);
+
+      const subPenalty = keepOn ? (wasOn ? 0 : 20) : 0;
+      const shufflePenalty = sameSlot ? 0 : 1;
+
+      const pos = slot.startsWith("CM") ? "CM" : slot;
+      const r = rankOf(name, pos);
+      const rankPenalty = rankWeight(r);
+
+      const cmPenalty = slot.startsWith("CM") && prevLineup ? (prevCM.has(name)?0:3) : 0;
+
+      return subPenalty + shufflePenalty + rankPenalty + cmPenalty;
+    }
+
+    function dfs(i, cost){
+      if (timeUp()) return;
+      if (results.length >= K) return;
+
+      if (i>=order.length){
+        results.push({cost: cost + avoidPenalty(lineup)*6, lineup: {...lineup}});
+        return;
+      }
+
+      const slot = order[i];
+      if (slot==="GK"){
+        lineup[slot]=gkName;
+        dfs(i+1, cost);
+        delete lineup[slot];
+        return;
+      }
+
+      for (const name of cand[slot]){
+        if (used.has(name)) continue;
+        lineup[slot]=name;
+        used.add(name);
+        dfs(i+1, cost + score(slot,name));
+        used.delete(name);
+        delete lineup[slot];
+        if (timeUp() || results.length>=K) return;
+      }
+    }
+
+    dfs(0,0);
+    results.sort((a,b)=>a.cost-b.cost);
+    return results;
+  }
+
+  function applyLineupToDemand(lineup, demand, ticks){
+    // ticks can be +seg.tickLen to consume, or negative to undo
+    demand[gkName] = (demand[gkName] || 0) - ticks; // not really used, but harmless
+    for (const slot of slots){
+      if (slot==="GK") continue;
+      const n = lineup[slot];
+      demand[n] = (demand[n] || 0) - ticks;
+    }
+  }
+
+  function isFeasible(i, demand){
+    // exact total remaining must match remaining outfield capacity
+    if (sumDemand(demand) !== requiredOutfieldTicksFrom(i)) return false;
+
+    const ticksLeft = remTicksFrom[i];
+    for (const n of names){
+      if (n === gkName) continue;
+      const d = demand[n] || 0;
+      if (d < 0) return false;
+      if (d > ticksLeft) return false; // any one player can't play more ticks than remain
+    }
+    return true;
+  }
+
+  // Memo of failed states
+  const seen = new Set();
+
+  function recurse(i, prevLineup, demand){
+    if (timeUp() || best) return;
+
+    if (!isFeasible(i, demand)) return;
+
+    const key = i + "|" + demandKey(demand) + "|" + lineupKey(prevLineup);
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    if (i >= segments.length){
+      best = schedule.slice();
+      return;
+    }
+
+    const seg = segments[i];
+    const cands = solveSegmentTopK(seg, demand, prevLineup, 900);
+    if (!cands.length) return;
+
+    for (const c of cands){
+      if (timeUp() || best) return;
+
+      schedule.push({start:seg.start,end:seg.end,tickLen:seg.tickLen,lineup:c.lineup});
+      applyLineupToDemand(c.lineup, demand, seg.tickLen);
+
+      recurse(i+1, c.lineup, demand);
+
+      applyLineupToDemand(c.lineup, demand, -seg.tickLen);
+      schedule.pop();
+    }
+  }
+
+  // Sanity: GK must be 8 ticks
+  if ((totalDemand[gkName] || 0) < 8){
+    return {ok:false, reason:`GK ${gkName} has only ${(totalDemand[gkName]||0)*10} mins.`};
+  }
+
+  // Ensure exact totals line up before searching
+  if (!isFeasible(0, totalDemand)){
+    return {ok:false, reason:"Minute targets are not exactly feasible (total ticks or per-player limits). Ensure auto-balance is ON and totals = 720."};
+  }
+
+  recurse(0, null, totalDemand);
+
+  if (!best){
+    if (timedOut) return {ok:false, reason:`Timed out after ${MAX_MS}ms. (Try 10-min blocks fallback; should still solve with memo.)`};
+    return {ok:false, reason:"Search exhausted (unexpected with memo)."};
+  }
+
+  return {ok:true, schedule: best};
+}
+
+  // ---------------- FULL MATCH SCHEDULER (from minutes table) ----------------
+  function generateFullSchedule(){
+  const out = document.getElementById("scheduleContainer");
+  out.style.display = "block";
+  try {
+    generateFullSchedule_impl();
+  } catch (e) {
+    console.error(e);
+    out.innerHTML =
+      `<h4>Interval Changes</h4>
+       <div class="warn">Generate Full Match Schedule crashed:<br>
+       <pre style="text-align:left;white-space:pre-wrap">${escapeHtml(e?.stack || e?.message || String(e))}</pre></div>`;
+  }
+}
+
+function solveFullMatchFromDemand(segments, demand, gkName){
+  const t0 = performance.now();
+  const MAX_MS = 12000; // increased a bit, but main win is pruning
+  let timedOut = false;
+
+  function timeUp(){
+    if (timedOut) return true;
+    if (performance.now() - t0 > MAX_MS){ timedOut = true; return true; }
+    return false;
+  }
+
+  const names = players.map(p=>p.name);
+const idxOfName = new Map(names.map((n,i)=>[n,i]));
+  const slotPos = (slot) => slot.startsWith("CM") ? "CM" : slot;
+
+  // counts per position per "tick" (10-min)
+  const posSlotsPerTick = { GK:1, LB:1, CB:1, RB:1, LM:1, CM:2, RM:1, ST:1 };
+
+  function cloneDemand(d){
+    const out = {};
+    for (const n of names){
+      out[n] = {};
+      for (const pos of positions) out[n][pos] = d[n]?.[pos] || 0;
+    }
+    return out;
+  }
+
+  function demandKey(d){
+    // fixed order: player -> positions
+    return names.map(n => positions.map(pos => (d[n]?.[pos]||0)).join(".")).join("|");
+  }
+
+  function lineupKey(lu){
+    if (!lu) return "";
+    return slots.map(s => lu[s] || "").join("|");
+  }
+
+  // Remaining ticks (time capacity) from each segment index
+  const remTicksFrom = [];
+  for (let i=0; i<=segments.length; i++){
+    let t = 0;
+    for (let j=i; j<segments.length; j++) t += segments[j].tickLen;
+    remTicksFrom[i] = t;
+  }
+
+  // Remaining capacity per POSITION from each segment index (in ticks)
+  const remPosCapFrom = [];
+  for (let i=0; i<=segments.length; i++){
+    const cap = {};
+    positions.forEach(p => cap[p] = 0);
+    for (let j=i; j<segments.length; j++){
+      const tl = segments[j].tickLen;
+      cap.GK += posSlotsPerTick.GK * tl;
+      cap.LB += posSlotsPerTick.LB * tl;
+      cap.CB += posSlotsPerTick.CB * tl;
+      cap.RB += posSlotsPerTick.RB * tl;
+      cap.LM += posSlotsPerTick.LM * tl;
+      cap.CM += posSlotsPerTick.CM * tl;
+      cap.RM += posSlotsPerTick.RM * tl;
+      cap.ST += posSlotsPerTick.ST * tl;
+    }
+    remPosCapFrom[i] = cap;
+  }
+
+  function totalTicksRemaining(d){
+    let s = 0;
+    for (const n of names){
+      for (const pos of positions){
+        const v = d[n]?.[pos] || 0;
+        if (v > 0) s += v;
+      }
+    }
+    return s;
+  }
+
+  function remainingCapacityFrom(i){
+    return remTicksFrom[i] * 9; // 9 slots
+  }
+
+  function posDemandSum(d, pos){
+    let s = 0;
+    for (const n of names) s += (d[n]?.[pos] || 0);
+    return s;
+  }
+
+  function playerDemandSum(d, name){
+    let s = 0;
+    for (const pos of positions) s += (d[name]?.[pos] || 0);
+    return s;
+  }
+
+  // --- change minimisation + timing preferences ---
+  function diffCount(prev, curr){
+    if (!prev) return 0;
+    let c = 0;
+    for (const slot of slots){
+      if (slot === "GK") continue;
+      if (prev[slot] !== curr[slot]) c++;
+    }
+    return c;
+  }
+
+  function subCount(prev, curr){
+  if (!prev) return 0;
+  const a = new Set(Object.values(prev));
+  const b = new Set(Object.values(curr));
+  a.delete(gkName); b.delete(gkName);
+  // number coming off = players in a not in b
+  let off = 0;
+  for (const n of a) if (!b.has(n)) off++;
+  return off;
+}
+
+function boundaryPenalty(time){
+  // Hard preference: do NOT start rotating at 30/50 (causes unnatural “10-min sub blocks”)
+  // Encourage subs at 20/40/60; allow 70 if using 10-min segments.
+  if (time < 20) return 1e9;   // still effectively forbidden
+  if (time === 20) return 5;
+  if (time === 30) return 250;
+  if (time === 40) return 8;
+  if (time === 50) return 180;
+  if (time === 60) return 5;
+  if (time === 70) return 10;
+  return 50;
+}
+
+function changeCost(prev, curr, boundaryTime, prevBoundaryHadChange){
+  if (!prev) return 0;
+
+  const subs = subCount(prev, curr);
+  if (subs === 0) return 0;
+
+  // Aim for ~3 subs at the main blocks
+  const target = (boundaryTime === 20 || boundaryTime === 40 || boundaryTime === 60) ? 3
+               : (boundaryTime === 70) ? 3
+               : 0;
+
+  // Penalize “wrong number of subs” at key boundaries
+  const dev = Math.abs(subs - target);
+  const devPenalty = (target > 0) ? (dev * dev * 40) : (subs * 25);
+
+  // Prefer clustering: if we already changed at the previous boundary, make it cheaper to change again
+  const clusterFactor = prevBoundaryHadChange ? 0.7 : 1.0;
+
+  // Also lightly penalize *how many slots moved* (position swaps)
+  const slotMoves = diffCount(prev, curr);
+
+  return clusterFactor * (boundaryPenalty(boundaryTime) * 10 + devPenalty + slotMoves * 3);
+}
+
+
+  function candidatesFor(slot, d, tickLen, prevLineup){
+    if (slot === "GK") return [gkName];
+
+    const pos = slotPos(slot);
+    const prevSame = prevLineup ? prevLineup[slot] : null;
+
+    const list = [];
+    for (const p of players){
+      const name = p.name;
+      if (name === gkName) continue;
+      if ((d[name]?.[pos]||0) >= tickLen) list.push(name);
+    }
+
+    list.sort((a,b)=>{
+      const aSame = (a===prevSame)?0:1;
+      const bSame = (b===prevSame)?0:1;
+      if (aSame!==bSame) return aSame-bSame;
+
+      const da = d[a]?.[pos]||0;
+      const db = d[b]?.[pos]||0;
+      if (da!==db) return db-da;
+
+      const ta = playerDemandSum(d,a);
+      const tb = playerDemandSum(d,b);
+      if (ta!==tb) return tb-ta;
+
+      return a.localeCompare(b);
+    });
+
+    const cap = Math.min(players.length, 10);
+    if (list.length <= cap) return list;
+    return list.slice(0, cap-2).concat(list.slice(-2));
+  }
+
+  function applyLineup(d, lineup, tickLen){
+    for (const slot of slots){
+      const name = lineup[slot];
+      const pos = slotPos(slot);
+      d[name][pos] -= tickLen;
+    }
+  }
+
+  function undoLineup(d, lineup, tickLen){
+    for (const slot of slots){
+      const name = lineup[slot];
+      const pos = slotPos(slot);
+      d[name][pos] += tickLen;
+    }
+  }
+
+  function buildLineupsForSegment(seg, d, prevLineup, K=260){
+    const cand = {};
+
+    for (const slot of slots){
+      const list = candidatesFor(slot, d, seg.tickLen, prevLineup);
+      if (!list.length) return [];
+      cand[slot] = list;
+    }
+
+    const order = [...slots].sort((a,b)=>cand[a].length - cand[b].length);
+    const used = new Set();
+    const lu = {};
+    const out = [];
+
+    function dfs(i){
+      if (timeUp()) return;
+      if (out.length >= K) return;
+      if (i >= order.length){
+        out.push({ ...lu });
+        return;
+      }
+      const slot = order[i];
+      for (const n of cand[slot]){
+        if (used.has(n)) continue;
+        used.add(n);
+        lu[slot] = n;
+        dfs(i+1);
+        delete lu[slot];
+        used.delete(n);
+        if (timeUp() || out.length >= K) return;
+      }
+    }
+
+    dfs(0);
+    return out;
+  }
+
+  function feasibleAt(i, d){
+    // total must match remaining capacity exactly
+    if (totalTicksRemaining(d) !== remainingCapacityFrom(i)) return false;
+
+    // per-position remaining must match remaining capacity per position
+    for (const pos of positions){
+      if (posDemandSum(d, pos) !== remPosCapFrom[i][pos]) return false;
+    }
+
+    // per-player: cannot need more ticks than remaining time (can only play once per segment)
+    const maxTicksPerPlayer = remTicksFrom[i];
+    for (const n of names){
+      if (n === gkName) continue;
+      const need = playerDemandSum(d, n);
+      if (need < 0) return false;
+      if (need > maxTicksPerPlayer) return false;
+    }
+
+    // GK fixed: only GK player can have GK demand, and it must match remaining GK cap
+    const gkCap = remPosCapFrom[i].GK;
+    if ((d[gkName]?.GK || 0) !== gkCap) return false;
+    for (const n of names){
+      if (n !== gkName && (d[n]?.GK || 0) !== 0) return false;
+    }
+
+    return true;
+  }
+
+  const d0 = cloneDemand(demand);
+  const schedule = [];
+  let best = null;
+  let bestCost = Infinity;
+  const seen = new Set();
+
+  function recurse(i, prevLineup, first20Lineup, prevBoundaryHadChange, runningCost, benchStreak){
+    if (timeUp() || best) return;
+    if (runningCost >= bestCost) return;
+    if (!feasibleAt(i, d0)) return;
+
+    const benchKey = benchStreak.join(""); // digits 0/1/2 (we prune >2)
+const key = i + "|" + demandKey(d0) + "|" + lineupKey(prevLineup) + "|" + (prevBoundaryHadChange ? "1" : "0") + "|" + (first20Lineup ? "A" : "B") + "|" + benchKey;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    if (i >= segments.length){
+      best = schedule.slice();
+      bestCost = Math.min(bestCost, runningCost);
+      return;
+    }
+
+    const seg = segments[i];
+    let lineups = buildLineupsForSegment(seg, d0, prevLineup, 260);
+    if (!lineups.length) return;
+
+    // Enforce: no changes within the first 20 minutes when using 10-min segments
+    if (seg.start < 20){
+      if (seg.start === 0){
+        // capture after choosing
+      } else {
+        if (!first20Lineup) return;
+        const lk = lineupKey(first20Lineup);
+        lineups = lineups.filter(lu => lineupKey(lu) === lk);
+        if (!lineups.length) return;
+      }
+    }
+    // Try best style first
+    // Prefer lineups that include players who are "at risk" of hitting the 20-min bench limit
+lineups.sort((a,b)=>{
+  // Build atRisk set from current benchStreak
+  const atRisk = new Set();
+  for (const n of names){
+    if (n === gkName) continue;
+    if ((benchStreak[idxOfName.get(n)] || 0) === 2) atRisk.add(n);
+  }
+
+  const riskScore = (lu) => {
+    if (atRisk.size === 0) return 0;
+    let s = 0;
+    const on = new Set(Object.values(lu));
+    for (const n of atRisk) if (on.has(n)) s++;
+    return s;
+  };
+
+  const ra = riskScore(a), rb = riskScore(b);
+  if (ra !== rb) return rb - ra;
+
+  const ca = changeCost(prevLineup, a, seg.start, prevBoundaryHadChange);
+  const cb = changeCost(prevLineup, b, seg.start, prevBoundaryHadChange);
+  return ca - cb;
+});
+
+
+    for (const lu of lineups){
+      if (timeUp() || best) return;
+
+      const boundaryChanged = prevLineup ? (diffCount(prevLineup, lu) > 0) : false;
+      const extraCost = changeCost(prevLineup, lu, seg.start, prevBoundaryHadChange);
+      const nextCost = runningCost + extraCost;
+      if (nextCost >= bestCost) continue;
+
+      const nextFirst20 = first20Lineup || (seg.start === 0 ? lu : first20Lineup);
+
+// ---- Bench streak rule: nobody benched > 20 mins (2 ticks) ----
+let badBench = false;
+const nextBench = benchStreak.slice();
+const on = new Set(Object.values(lu));
+
+for (const n of names){
+  if (n === gkName) continue;
+  const idx = idxOfName.get(n);
+  if (on.has(n)) nextBench[idx] = 0;
+  else nextBench[idx] = nextBench[idx] + seg.tickLen;
+  if (nextBench[idx] > 2) { badBench = true; break; } // > 20 mins
+}
+if (badBench) continue;
+// ---------------------------------------------------------------
+
+schedule.push({ start: seg.start, end: seg.end, tickLen: seg.tickLen, lineup: lu });
+applyLineup(d0, lu, seg.tickLen);
+
+recurse(i+1, lu, nextFirst20, boundaryChanged, nextCost, nextBench);
+
+undoLineup(d0, lu, seg.tickLen);
+schedule.pop();
+
+
+      if (best) return;
+    }
+  }
+
+  // Upfront feasibility check
+  if (!feasibleAt(0, d0)){
+    return { ok:false, reason:"Minutes table is not internally feasible (position totals / GK / per-player totals). Re-check totals row and ensure GK = 80 exactly for one player only." };
+  }
+
+  const initBench = names.map(_ => 0);
+recurse(0, null, null, false, 0, initBench);
+
+  if (!best){
+    if (timedOut) return { ok:false, reason:`Timed out after ${MAX_MS}ms while building schedule from minutes table.` };
+    return { ok:false, reason:"Could not build a valid schedule from the minutes table under the current rules." };
+  }
+
+  return { ok:true, schedule: best };
+}
+
+  function chooseLockedGK(demand){
+    let best = null, bestT = -1;
+    for (const p of players) {
+      const t = (demand[p.name]?.GK || 0);
+      if (t > bestT || (t === bestT && best && p.name.localeCompare(best.name) < 0)) {
+        best = p;
+        bestT = t;
+      }
+    }
+    return bestT > 0 ? best : null;
+  }
+
+  function solveSegment(ticksNeeded, demand, locked, prevLineup){
+    const slotPos = (slot) => slot.startsWith("CM") ? "CM" : slot;
+
+    const prevOn = new Set();
+    if (prevLineup) for (const s of slots) if (s !== "GK") prevOn.add(prevLineup[s]);
+
+    const cand = {};
+    for (const slot of slots) {
+      const pos = slotPos(slot);
+
+      if (slot === "GK") {
+        cand[slot] = locked.GK ? [locked.GK] : [];
+        continue;
+      }
+
+      const list = [];
+      for (const p of players) {
+        const name = p.name;
+        if (locked.GK && name === locked.GK) continue;
+        if ((demand[name]?.[pos] || 0) >= ticksNeeded) list.push(name);
+      }
+
+      const prevSame = prevLineup ? prevLineup[slot] : null;
+      list.sort((a,b) => {
+        const aSame = (a === prevSame) ? 0 : 1;
+        const bSame = (b === prevSame) ? 0 : 1;
+        if (aSame !== bSame) return aSame - bSame;
+
+        const keepOn = document.getElementById("preferKeepOnPitch").checked;
+        if (keepOn && prevLineup){
+          const aOn = prevOn.has(a) ? 0 : 1;
+          const bOn = prevOn.has(b) ? 0 : 1;
+          if (aOn !== bOn) return aOn - bOn;
+        }
+        return a.localeCompare(b);
+      });
+
+      cand[slot] = list;
+    }
+
+    for (const slot of slots) {
+      if (!cand[slot] || cand[slot].length === 0) {
+        return { ok:false, reason:`No eligible player for ${slot} with ${ticksNeeded*10} minutes remaining.` };
+      }
+    }
+
+    const order = [...slots].sort((a,b) => cand[a].length - cand[b].length);
+    const used = new Set();
+    const lineup = {};
+    let best = null;
+
+    function score(slot, name){
+      if (!prevLineup) return 0;
+      if (slot === "GK") return 0;
+
+      const keepOn = document.getElementById("preferKeepOnPitch").checked;
+      const wasOn = prevOn.has(name);
+      const sameSlot = (prevLineup[slot] === name);
+
+      const subPenalty = keepOn ? (wasOn ? 0 : 100) : 0;
+      const shufflePenalty = sameSlot ? 0 : 1;
+      return subPenalty + shufflePenalty;
+    }
+
+    function dfs(i, cost){
+      if (best && cost >= best.cost) return;
+      if (i >= order.length) {
+        best = { cost, lineup: { ...lineup } };
+        return;
+      }
+      const slot = order[i];
+      for (const name of cand[slot]) {
+        if (used.has(name)) continue;
+        lineup[slot] = name;
+        used.add(name);
+        dfs(i+1, cost + score(slot, name));
+        used.delete(name);
+        delete lineup[slot];
+      }
+    }
+
+    dfs(0,0);
+    if (!best) return { ok:false, reason:"Could not assign 9 distinct players to slots." };
+    return { ok:true, lineup: best.lineup };
+  }
+
+  function applyLineupToDemand(lineup, demand, ticks){
+    for (const slot of slots) {
+      const name = lineup[slot];
+      const pos = slot.startsWith("CM") ? "CM" : slot;
+      if (!demand[name]) continue;
+      demand[name][pos] = (demand[name][pos] || 0) - ticks;
+    }
+  }
+
+  function computeRemainingDemand(demand){
+    let total = 0;
+    for (const name in demand) {
+      for (const pos of positions) {
+        const t = demand[name][pos] || 0;
+        if (t > 0) total += t;
+      }
+    }
+    return { totalTicks: total };
+  }
+
+  function buildChangeRows(schedule){
+  const rows = [];
+
+  for (let i=1; i<schedule.length; i++){
+    const prev = schedule[i-1].lineup;
+    const curr = schedule[i].lineup;
+
+    const prevSet = new Set(Object.values(prev));
+    const currSet = new Set(Object.values(curr));
+
+    // GK is fixed; exclude from subs list
+    prevSet.delete(prev["GK"]);
+    currSet.delete(curr["GK"]);
+
+    const off = [...prevSet].filter(n => !currSet.has(n)).sort((a,b)=>a.localeCompare(b));
+    const on  = [...currSet].filter(n => !prevSet.has(n)).sort((a,b)=>a.localeCompare(b));
+
+    rows.push({ time: schedule[i].start, off, on });
+  }
+
+  return rows;
+}
+
+
+  function renderPitchFromLineup(lineup){
+  document.querySelectorAll(".shirt-wrap").forEach(n => n.remove());
+  document.getElementById("bench").innerHTML = "";
+
+  // --- Pitch shirts ---
+  slots.forEach(slot => {
+    const name = lineup[slot];
+    if (!name) return;
+
+    const isGK = slot === "GK";
+    const el = makeShirtEl({ name }, isGK);
+
+    // dataset tags so drag/drop can identify where this shirt came from
+    el.dataset.playerName = name;
+    el.dataset.area = "pitch";
+    el.dataset.slot = slot;
+
+    el.style.left = coords[slot].x + "px";
+    el.style.top  = coords[slot].y + "px";
+    document.getElementById("pitch-container").appendChild(el);
+    requestAnimationFrame(() => fitTextToBox(el.querySelector(".shirt-name"), 66, 42, 14, 9));
+  });
+
+  // --- Bench shirts ---
+  const onPitch = new Set(Object.values(lineup));
+  players.filter(p => !onPitch.has(p.name)).forEach(p => {
+    const wrap = document.createElement("div");
+    wrap.className = "bench-wrap";
+
+    const el = makeShirtEl(p, false);
+
+    // dataset tags so drag/drop can identify this as bench
+    el.dataset.playerName = p.name;
+    el.dataset.area = "bench";
+    el.dataset.slot = "BENCH";
+
+    el.style.position = "relative";
+    el.style.left = "0px";
+    el.style.top = "0px";
+
+    wrap.appendChild(el);
+    document.getElementById("bench").appendChild(wrap);
+    requestAnimationFrame(() => fitTextToBox(el.querySelector(".shirt-name"), 66, 42, 13, 9));
+  });
+
+  // If schedule editing is active, re-enable drag/drop after re-render
+  if (scheduleEditActive) enableDragEditForCurrentPeriod();
+}
+
+  // ---------------- HELPERS ----------------
+  function makeShirtEl(playerObj, isGK){
+    const wrap = document.createElement("div");
+    wrap.className = "shirt-wrap";
+
+    const img = document.createElement("img");
+    img.className = "shirt-img";
+    img.alt = isGK ? "GK Shirt" : "Shirt";
+    img.src = isGK ? SHIRT_GK : SHIRT_OUTFIELD;
+    img.draggable = false;
+
+    const name = document.createElement("div");
+    name.className = "shirt-name";
+    name.innerText = playerObj.name;
+
+    wrap.appendChild(img);
+    wrap.appendChild(name);
+    return wrap;
+  }
+function renderLineupSnapshots(schedule){
+  if (!schedule || !schedule.length) return "";
+
+  const headerSlots = ["GK","LB","CB","RB","LM","CM_L","CM_R","RM","ST"];
+  const slotLabel = (s) => s.startsWith("CM") ? "CM" : s;
+
+  // Show kickoff + any boundary where ANY slot changed (including GK, though it shouldn't)
+  const rows = [];
+  rows.push(schedule[0]);
+
+  for (let i=1; i<schedule.length; i++){
+    const prev = schedule[i-1].lineup;
+    const curr = schedule[i].lineup;
+
+    let changed = false;
+    for (const slot of headerSlots){
+      if ((prev[slot] || "") !== (curr[slot] || "")) { changed = true; break; }
+    }
+    if (changed) rows.push(schedule[i]);
+  }
+
+  const htmlRows = rows.map(seg => {
+    const lu = seg.lineup;
+    return `
+      <tr>
+        <td><b>${seg.start}'</b></td>
+        ${headerSlots.map(slot => `<td>${escapeHtml(lu[slot] || "-")}</td>`).join("")}
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <h4>Lineup Snapshots (only at changes)</h4>
+    <table>
+      <tr>
+        <th>Time</th>
+        ${headerSlots.map(s => `<th>${slotLabel(s)}</th>`).join("")}
+      </tr>
+      ${htmlRows}
+    </table>
+  `;
+}
+
+  function fitTextToBox(el, maxW, maxH, startSize=13, minSize=9) {
+    let size = startSize;
+    el.style.fontSize = size + "px";
+    while (size > minSize && (el.scrollWidth > maxW || el.scrollHeight > maxH)) {
+      size -= 1;
+      el.style.fontSize = size + "px";
+    }
+  }
+
+  function escapeHtml(str){
+    return String(str)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  /* defaults */
+  ["P1","P2","P3","P4","P5","P6","P7","P8","P9","P10","P11","P12"]
+    .forEach(n => players.push({
+      name:n,
+      preferred:80,
+      mins:initMins(),
+      prefs:["","","",""],
+      avoid:""
+    }));
+    renderTable();
+
+  /* ======== PASTE THE ONE-PASTE BLOCK HERE (START) ======== */
+
+  (function injectOOPStylesOnce(){
+    if (document.getElementById("oopStyles")) return;
+    const style = document.createElement("style");
+    style.id = "oopStyles";
+    style.textContent = `
+      .shirt-wrap.oop {
+        outline: 4px solid #d10000;
+        outline-offset: -4px;
+        border-radius: 12px;
+      }
+      .shirt-wrap.oop::after{
+        content: "!";
+        position: absolute;
+        top: 2px;
+        right: 6px;
+        font-weight: 900;
+        font-size: 16px;
+        color: #d10000;
+        text-shadow: 0 1px 0 rgba(255,255,255,0.8);
+        pointer-events: none;
+      }
+    `;
+    document.head.appendChild(style);
+  })();
+
+  let currentSchedule = null;
+  let selectedSegmentIndex = 0;
+  let scheduleMode = "minutes";
+
+  if (typeof escapeHtml !== "function"){
+    window.escapeHtml = function(str){
+      return String(str)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    };
+  }
+
+  function isOutOfPosition(name, slot){
+    if (!name) return false;
+    if (slot === "GK") return false;
+    const pos = slot.startsWith("CM") ? "CM" : slot;
+    return rankOf(name, pos) === 999;
+  }
+
+  function buildChangeRows(schedule){
+    const rows = [];
+    for (let i=1; i<schedule.length; i++){
+      const prev = schedule[i-1].lineup;
+      const curr = schedule[i].lineup;
+
+      const prevSet = new Set(Object.values(prev));
+      const currSet = new Set(Object.values(curr));
+
+      prevSet.delete(prev["GK"]);
+      currSet.delete(curr["GK"]);
+
+      const off = [...prevSet].filter(n => !currSet.has(n)).sort((a,b)=>a.localeCompare(b));
+      const on  = [...currSet].filter(n => !prevSet.has(n)).sort((a,b)=>a.localeCompare(b));
+
+      rows.push({ time: schedule[i].start, off, on });
+    }
+    return rows;
+  }
+
+  function renderLineupSnapshots(schedule){
+    if (!schedule || !schedule.length) return "";
+
+    const headerSlots = ["GK","LB","CB","RB","LM","CM_L","CM_R","RM","ST"];
+    const slotLabel = (s) => s.startsWith("CM") ? "CM" : s;
+
+    const rows = [];
+    rows.push(schedule[0]);
+    for (let i=1; i<schedule.length; i++){
+      const prev = schedule[i-1].lineup;
+      const curr = schedule[i].lineup;
+
+      let changed = false;
+      for (const slot of headerSlots){
+        if ((prev[slot] || "") !== (curr[slot] || "")) { changed = true; break; }
+      }
+      if (changed) rows.push(schedule[i]);
+    }
+
+    const htmlRows = rows.map(seg => {
+      const lu = seg.lineup;
+      return `
+        <tr>
+          <td><b>${seg.start}'</b></td>
+          ${headerSlots.map(slot => `<td>${escapeHtml(lu[slot] || "-")}</td>`).join("")}
+        </tr>
+      `;
+    }).join("");
+
+    return `
+      <h4>Lineup Snapshots (only at changes)</h4>
+      <table>
+        <tr>
+          <th>Time</th>
+          ${headerSlots.map(s => `<th>${slotLabel(s)}</th>`).join("")}
+        </tr>
+        ${htmlRows}
+      </table>
+    `;
+  }
+
+  function renderScheduleEditor(){
+    if (!currentSchedule || !currentSchedule.length) return "";
+
+    const opts = currentSchedule.map((s,i)=> {
+      const label = `${s.start}'–${s.end}'`;
+      return `<option value="${i}" ${i===selectedSegmentIndex ? "selected":""}>${label}</option>`;
+    }).join("");
+
+    return `
+      <h4>Manual Edit</h4>
+      <div class="panel">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label><b>Edit interval:</b>
+            <select onchange="selectSegment(+this.value)">${opts}</select>
+          </label>
+          <small style="opacity:.75">Pick an interval, choose a slot & player, Apply. Out-of-position is allowed and will be highlighted.</small>
+        </div>
+
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label>Slot:
+            <select id="editSlot">
+              ${slots.filter(s=>s!=="GK").map(s=>`<option value="${s}">${s}</option>`).join("")}
+            </select>
+          </label>
+
+          <label>Player:
+            <select id="editPlayer">
+              ${players.map(p=>`<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`).join("")}
+            </select>
+          </label>
+
+          <button type="button" onclick="applyManualAssignment()">Apply</button>
+          <span id="editMsg" style="font-weight:700"></span>
+        </div>
+      </div>
+    `;
+  }
+
+  function selectSegment(i){
+    selectedSegmentIndex = i;
+    const seg = currentSchedule?.[selectedSegmentIndex];
+    if (seg) renderPitchFromLineup(seg.lineup);
+    refreshScheduleViews();
+    enableDragEditForCurrentPeriod();
+  }
+
+  function refreshScheduleViews(){
+    if (!currentSchedule) return;
+
+    const changes = buildChangeRows(currentSchedule);
+    const snapshotsHtml = renderLineupSnapshots(currentSchedule);
+    const editorHtml = renderScheduleEditor();
+
+    const changesHtml = `
+      <h4>Interval Changes</h4>
+      <table>
+        <tr><th>Time</th><th>Subbed Off</th><th>Subbed On</th></tr>
+        ${changes.map(r => `
+          <tr>
+            <td><b>${r.time}'</b></td>
+            <td>${escapeHtml(r.off.join(", ") || "-")}</td>
+            <td>${escapeHtml(r.on.join(", ") || "-")}</td>
+          </tr>
+        `).join("")}
+      </table>
+    `;
+
+    const changesDiv = document.getElementById("changesBlock");
+    const snapsDiv = document.getElementById("snapshotsBlock");
+    const editorDiv = document.getElementById("editorBlock");
+
+    if (changesDiv) changesDiv.innerHTML = changesHtml;
+    if (editorDiv) editorDiv.innerHTML = editorHtml;
+    if (snapsDiv) snapsDiv.innerHTML = snapshotsHtml;
+  }
+
+  function fillMinutesFromSchedule(schedule){
+  players.forEach(p => p.mins = initMins());
+
+  const gk = schedule?.[0]?.lineup?.GK;
+  if (gk){
+    const p = players.find(x=>x.name===gk);
+    if (p) p.mins.GK = 80;
+  }
+
+  for (const seg of (schedule || [])){
+    for (const slot of slots){
+      if (slot === "GK") continue;
+      const name = seg.lineup[slot];
+      const pos = slot.startsWith("CM") ? "CM" : slot;
+      const pl = players.find(x=>x.name===name);
+      if (pl) pl.mins[pos] += seg.tickLen * 10;
+    }
+  }
+}
+function afterScheduleEdit(){
+  // Update minutes table from the edited schedule
+  if (typeof fillMinutesFromSchedule === "function") {
+    fillMinutesFromSchedule(currentSchedule);
+  }
+
+  // Re-render pitch to reflect the edited current period
+  const seg = currentSchedule?.[selectedSegmentIndex];
+  if (seg) renderPitchFromLineup(seg.lineup);
+
+  // Refresh schedule output blocks (subs table etc)
+  if (typeof refreshScheduleViews === "function") {
+    refreshScheduleViews();
+  }
+
+  // Ensure drag stays enabled (prevents “locking” after first edit)
+  enableDragEditForCurrentPeriod();
+
+  // Also keep totals correct
+  if (typeof updateTotals === "function") updateTotals();
+}
+
+function enableDragEditForCurrentPeriod(){
+  if (!scheduleEditActive) return;
+  if (!currentSchedule || !currentSchedule[selectedSegmentIndex]) return;
+
+  // IMPORTANT: always re-bind after every render so it never "locks"
+  const seg = currentSchedule[selectedSegmentIndex];
+
+  const allShirts = document.querySelectorAll("#pitch-container .shirt-wrap, #bench .shirt-wrap");
+
+  allShirts.forEach(el => {
+    el.classList.add("editable");
+    el.setAttribute("draggable", "true");
+
+    const name = (el.dataset.playerName || el.querySelector(".shirt-name")?.innerText || "").trim();
+    el.dataset.playerName = name;
+
+    el.ondragstart = (ev) => {
+      if (!name) return;
+      draggedPlayerName = name;
+      ev.dataTransfer.setData("text/plain", name);
+      ev.dataTransfer.effectAllowed = "move";
+    };
+
+    el.ondragover = (ev) => {
+      ev.preventDefault(); // allow drop
+      ev.dataTransfer.dropEffect = "move";
+    };
+
+    el.ondrop = (ev) => {
+      ev.preventDefault();
+      const droppedName = (ev.dataTransfer.getData("text/plain") || draggedPlayerName || "").trim();
+      if (!droppedName) return;
+      handleDropSwap(el, droppedName);
+    };
+
+    el.ondragend = () => { draggedPlayerName = null; };
+  });
+}
+
+// Swap logic: drop onto another shirt swaps them (pitch<->pitch or pitch<->bench)
+function handleDropSwap(targetEl, droppedName){
+  const seg = currentSchedule[selectedSegmentIndex];
+  const lineup = seg.lineup;
+
+  const targetName = (targetEl.dataset.playerName || "").trim();
+  const targetArea = targetEl.dataset.area || "";
+  const targetSlot = targetEl.dataset.slot || "";
+
+  // find where the dropped player currently is (pitch slot or bench)
+  const fromSlot = findPlayerSlot(lineup, droppedName); // null => bench
+  const targetPitchSlot = (targetArea === "pitch") ? targetSlot : null;
+  const targetIsOnPitch = !!findPlayerSlot(lineup, targetName);
+
+  // Case 1: drop pitch player onto pitch player -> swap slots
+  if (fromSlot && targetPitchSlot){
+    if (fromSlot === targetPitchSlot) return;
+    const a = lineup[fromSlot];
+    const b = lineup[targetPitchSlot];
+    lineup[fromSlot] = b;
+    lineup[targetPitchSlot] = a;
+    afterScheduleEdit();
+    return;
+  }
+
+  // Case 2: drop bench player onto pitch player -> bench target, put dropped into target slot
+  if (!fromSlot && targetPitchSlot){
+    // can't put GK here
+    if (droppedName === lineup.GK) return;
+    lineup[targetPitchSlot] = droppedName;
+    afterScheduleEdit();
+    return;
+  }
+
+  // Case 3: drop pitch player onto bench player -> bring bench player into pitch player's slot
+  if (fromSlot && targetArea === "bench" && targetName){
+    // do not allow anyone to replace GK via bench swap here
+    if (fromSlot === "GK") return;
+    // bench player must not be GK
+    if (targetName === lineup.GK) return;
+
+    lineup[fromSlot] = targetName;
+    afterScheduleEdit();
+    return;
+  }
+
+  // bench->bench: no-op
+}
+
+function findPlayerSlot(lineup, name){
+  for (const slot of slots){
+    if (lineup[slot] === name) return slot;
+  }
+  return null;
+}
+
+// After any edit: rerender pitch+bench, keep dragging alive, and (optionally) update table
+function afterScheduleEdit(){
+  const seg = currentSchedule[selectedSegmentIndex];
+  renderPitchFromLineup(seg.lineup);     // this will call enableDragEditForCurrentPeriod() again
+  refreshScheduleViews?.();
+
+  // If you want edits to feed back into the minutes table immediately:
+  fillMinutesFromSchedule(currentSchedule);
+  renderTable();
+}
+
+function findPlayerSlot(lineup, name){
+  for (const slot of slots){
+    if (lineup[slot] === name) return slot;
+  }
+  return null;
+}
+
+// After any edit: rerender pitch+bench, keep dragging alive, and (optionally) update table
+function afterScheduleEdit(){
+  const seg = currentSchedule[selectedSegmentIndex];
+  renderPitchFromLineup(seg.lineup);     // this will call enableDragEditForCurrentPeriod() again
+  refreshScheduleViews?.();
+
+  // If you want edits to feed back into the minutes table immediately:
+  fillMinutesFromSchedule(currentSchedule);
+  renderTable();
+}
+
+
+function findSlotOfName(lineup, name){
+  for (const slot of slots){
+    if (lineup[slot] === name) return slot;
+  }
+  return null;
+}
+
+  function applyManualAssignment(){
+    const msg = document.getElementById("editMsg");
+    if (msg) { msg.textContent = ""; msg.style.color = ""; }
+
+    if (!currentSchedule) { if (msg) msg.textContent = "No schedule yet."; return; }
+    const seg = currentSchedule[selectedSegmentIndex];
+    if (!seg) { if (msg) msg.textContent = "Bad interval."; return; }
+
+    const slot = document.getElementById("editSlot")?.value;
+    const name = document.getElementById("editPlayer")?.value;
+
+    if (!slot || !name) { if (msg) msg.textContent = "Pick a slot and player."; return; }
+    if (slot === "GK") { if (msg) msg.textContent = "GK is locked."; return; }
+
+    const newLineup = { ...seg.lineup };
+    const prevNameInSlot = newLineup[slot];
+
+    let otherSlot = null;
+    for (const s of slots){
+      if (s === "GK") continue;
+      if (newLineup[s] === name) { otherSlot = s; break; }
+    }
+    newLineup[slot] = name;
+    if (otherSlot) newLineup[otherSlot] = prevNameInSlot;
+
+    const all = Object.values(newLineup);
+    if (new Set(all).size !== all.length){
+      if (msg) { msg.textContent = "Invalid: duplicate player on pitch."; msg.style.color = "#a40000"; }
+      return;
+    }
+    if (newLineup.GK !== seg.lineup.GK){
+      if (msg) { msg.textContent = "Invalid: GK must stay locked."; msg.style.color = "#a40000"; }
+      return;
+    }
+
+    seg.lineup = newLineup;
+
+    fillMinutesFromSchedule(currentSchedule);
+    renderPitchFromLineup(seg.lineup);
+    refreshScheduleViews();
+
+    const oop = isOutOfPosition(name, slot);
+    if (msg){
+      msg.textContent = oop
+        ? `Applied (out of position: ${name} at ${slot.startsWith("CM")?"CM":slot}).`
+        : "Applied.";
+      msg.style.color = oop ? "#a40000" : "#0a6a0a";
+    }
+  }
+  // ---- Drag editing helpers (needed by renderPitchFromLineup) ----
+scheduleEditActive = window.scheduleEditActive ?? false;
+draggedPlayerName = null;
+
+function clearDropTargets(){
+  document.querySelectorAll(".drop-target").forEach(n => n.remove());
+}
+
+function createDropTargets(seg){
+  const pc = document.getElementById("pitch-container");
+  if (!pc) return;
+
+  for (const slot of slots){
+    if (slot === "GK") continue;
+
+    const dz = document.createElement("div");
+    dz.className = "drop-target";
+    dz.style.position = "absolute";
+    dz.style.left = coords[slot].x + "px";
+    dz.style.top  = coords[slot].y + "px";
+    dz.style.width = "86px";
+    dz.style.height = "96px";
+    dz.style.pointerEvents = "auto";
+
+    dz.ondragover = (ev)=>{ ev.preventDefault(); dz.classList.add("dragover"); };
+    dz.ondragleave = ()=>dz.classList.remove("dragover");
+    dz.ondrop = (ev)=>{
+      ev.preventDefault();
+      dz.classList.remove("dragover");
+
+      const name = (ev.dataTransfer.getData("text/plain") || draggedPlayerName || "").trim();
+      if (!name) return;
+
+      applyDragDropToSlot(seg, name, slot);
+    };
+
+    pc.appendChild(dz);
+  }
+}
+
+function findSlotOfName(lineup, name){
+  for (const slot of slots){
+    if (lineup[slot] === name) return slot;
+  }
+  return null;
+}
+
+
+
+/* removed duplicate applyDragDropToSlot */
+
+
+// --------------------------------------------------------------
+  
+
+/* removed duplicate renderPitchFromLineup */
+
+
+function generateFullSchedule_impl(){
+  const out = document.getElementById("scheduleContainer");
+  out.style.display = "block";
+
+  const demand = {};
+  players.forEach(p => {
+    demand[p.name] = {};
+    positions.forEach(pos => {
+      demand[p.name][pos] = Math.round((p.mins[pos] || 0) / 10);
+    });
+  });
+
+  const gkPlayer = chooseLockedGK(demand);
+  const gkName = gkPlayer?.name || null;
+
+  const errors = [];
+  const warnings = [];
+
+  if (!gkName) {
+    errors.push("No goalkeeper found (no player has GK minutes > 0).");
+  } else if ((demand[gkName]["GK"] || 0) !== 8) {
+    errors.push(`Goalkeeper is locked, but ${gkName} has ${(demand[gkName]["GK"]||0)*10} GK minutes (needs 80). Fix GK to exactly 80.`);
+  }
+
+  if (errors.length){
+    out.innerHTML =
+      `<h4>Interval Changes</h4><div class="warn">Errors (fix these in the minutes table):<ul>` +
+      errors.map(e => `<li>${escapeHtml(e)}</li>`).join("") +
+      `</ul></div>`;
+    return;
+  }
+
+  const segments20 = [
+    { start:0, end:20, tickLen:2 },
+    { start:20, end:40, tickLen:2 },
+    { start:40, end:60, tickLen:2 },
+    { start:60, end:80, tickLen:2 },
+  ];
+  const segments10 = Array.from({length:8}, (_,i)=>({ start:i*10, end:(i+1)*10, tickLen:1 }));
+
+  let solved = solveFullMatchFromDemand(segments20, demand, gkName);
+  if (!solved.ok){
+    warnings.push("Had to use 10-minute intervals to satisfy minute allocations.");
+    solved = solveFullMatchFromDemand(segments10, demand, gkName);
+  }
+
+  if (!solved.ok){
+    out.innerHTML =
+      `<h4>Interval Changes</h4>` +
+      `<div class="warn">Errors (fix these in the minutes table):<ul>` +
+      `<li>${escapeHtml(solved.reason)}</li>` +
+      `</ul></div>`;
+    return;
+  }
+
+  currentSchedule = solved.schedule.map(s => ({
+    start: s.start, end: s.end, tickLen: s.tickLen,
+    lineup: { ...s.lineup }
+  }));
+  selectedSegmentIndex = 0;
+  scheduleMode = "minutes";
+  scheduleEditActive = true;
+
+  const changes = buildChangeRows(currentSchedule);
+  const snapshotsHtml = renderLineupSnapshots(currentSchedule);
+  const editorHtml = renderScheduleEditor();
+
+  let html = `<div id="changesBlock"><h4>Interval Changes</h4>`;
+  html += `<div class="ok">Schedule built successfully. GK locked: <b>${escapeHtml(gkName)}</b></div>`;
+
+  if (warnings.length){
+    html += `<div class="orange"><b>Notes:</b><ul>` +
+      warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("") +
+      `</ul></div>`;
+  }
+
+  html += `
+    <table>
+      <tr><th>Time</th><th>Subbed Off</th><th>Subbed On</th></tr>
+      ${changes.map(r => `
+        <tr>
+          <td><b>${r.time}'</b></td>
+          <td>${escapeHtml(r.off.join(", ") || "-")}</td>
+          <td>${escapeHtml(r.on.join(", ") || "-")}</td>
+        </tr>
+      `).join("")}
+    </table>
+  </div>
+  <div id="editorBlock">${editorHtml}</div>
+  <div id="snapshotsBlock">${snapshotsHtml}</div>
+  `;
+
+  out.innerHTML = html;
+
+  // Show the first period on the pitch and enable drag edit
+  if (currentSchedule.length) renderPitchFromLineup(currentSchedule[0].lineup);
+  enableDragEditForCurrentPeriod();
+}
+
+
+  /* ======== PASTE THE ONE-PASTE BLOCK HERE (END) ======== */
+window.addEventListener("DOMContentLoaded", () => {
+  try {
+    renderTable();
+  } catch (e) {
+    console.error(e);
+    const box = document.getElementById("errorBox");
+    if (box) {
+      box.style.display = "block";
+      box.innerHTML =
+        `<h4 style="margin:0 0 6px 0;color:#a40000">renderTable crashed</h4>
+         <pre style="margin:0;text-align:left;white-space:pre-wrap">${escapeHtml(e?.stack || e?.message || String(e))}</pre>`;
+    } else {
+      alert("renderTable crashed: " + (e?.message || e));
+    }
+  }
+});
+document.addEventListener("DOMContentLoaded", () => {
+  const tc = document.getElementById("tableContainer");
+  if (!tc) { alert("BOOT: #tableContainer missing"); return; }
+  tc.innerHTML = "<div style='border:2px solid red;padding:8px'>BOOT OK</div>";
+  renderTable();
+});
+</script>
+
+
+</body>
+</html>
