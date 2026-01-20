@@ -100,8 +100,6 @@
   }
 
   /* ---------- HALF PITCH (DEFENSIVE) ---------- */
-  <div id="liveTotalsPanel" class="panel" style="max-width:600px;"></div>
-  
   #pitch-container {
     position: relative;
     width: 400px;
@@ -227,6 +225,7 @@ Jacob	CM	RM	ST	LM
   <button onclick="generateFullSchedule()">Generate Full Match Schedule</button>
 
   <div id="editorContainer"></div>
+<div id="liveTotalsPanel" class="panel" style="max-width:600px;"></div>
 <h3>Formation</h3>
 <div id="periodTabs" class="period-tabs" style="margin:10px 0;"></div>
 <div id="pitch-container">
@@ -1700,8 +1699,6 @@ recurse(0, null, null, false, 0, initBench);
     el.dataset.playerName = name;
     el.dataset.area = "pitch";
     el.dataset.slot = slot;
-    const mins = currentSchedule ? computeMinutesFromSchedule(currentSchedule) : null;
-
     el.style.left = coords[slot].x + "px";
     el.style.top  = coords[slot].y + "px";
     document.getElementById("pitch-container").appendChild(el);
@@ -1715,7 +1712,7 @@ recurse(0, null, null, false, 0, initBench);
     wrap.className = "bench-wrap";
 
     const el = makeShirtEl({ name: p.name }, false);
-    const label = `${name}\n${liveMins[name] || 0}m`;
+    const label = `${p.name}\n${liveMins[p.name] || 0}m`;
     const nameEl = el.querySelector(".shirt-name");
     if (nameEl) nameEl.textContent = label;
 
@@ -2240,32 +2237,6 @@ function renderLineupSnapshots(schedule){
     }
   }
 }
-function afterScheduleEdit(){
-  // Update minutes table from the edited schedule
-  if (typeof fillMinutesFromSchedule === "function") {
-    fillMinutesFromSchedule(currentSchedule);
-  }
-
-  // Re-render pitch to reflect the edited current period
-  const seg = currentSchedule?.[selectedSegmentIndex];
-  if (seg) renderPitchFromLineup(seg.lineup);
-
-  // Refresh schedule output blocks (subs table etc)
-  if (typeof refreshScheduleViews === "function") {
-    refreshScheduleViews();
-  }
-
-  // Ensure drag stays enabled (prevents “locking” after first edit)
-  enableDragEditForCurrentPeriod();
-
-  // Also keep totals correct
-  if (typeof updateTotals === "function") updateTotals();
-
-  rebuildGlowMapForSelectedInterval();
-  renderPitchFromLineup(currentSchedule[selectedSegmentIndex].lineup);
-  renderLiveTotalsPanel();
-}
-
 function enableDragEditForCurrentPeriod(){
   if (!scheduleEditActive) return;
   if (!currentSchedule || !currentSchedule[selectedSegmentIndex]) return;
@@ -2377,6 +2348,10 @@ function afterScheduleEdit(){
   // 4) Feed edits back into minutes table (optional but you wanted feedback)
   if (typeof fillMinutesFromSchedule === "function") fillMinutesFromSchedule(currentSchedule);
   if (typeof renderTable === "function") renderTable();
+
+  // 4b) Update live minutes side panel
+  if (typeof renderLiveTotalsPanel === "function") renderLiveTotalsPanel();
+
 
   // 5) Ensure drag never "locks"
   if (typeof enableDragEditForCurrentPeriod === "function") enableDragEditForCurrentPeriod();
@@ -2616,12 +2591,6 @@ window.addEventListener("DOMContentLoaded", () => {
       alert("renderTable crashed: " + (e?.message || e));
     }
   }
-});
-document.addEventListener("DOMContentLoaded", () => {
-  const tc = document.getElementById("tableContainer");
-  if (!tc) { alert("BOOT: #tableContainer missing"); return; }
-  tc.innerHTML = "<div style='border:2px solid red;padding:8px'>BOOT OK</div>";
-  renderTable();
 });
 </script>
 
