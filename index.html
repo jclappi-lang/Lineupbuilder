@@ -100,7 +100,13 @@
 }
 
   /* Drag editing */
-  .shirt-wrap.editable { pointer-events: auto; cursor: grab; }
+  /* allow clicking/dragging ONLY when calibrating or editing */
+.shirt-wrap.editable { 
+  pointer-events: auto !important; 
+}
+.shirt-wrap.editable * { 
+  pointer-events: none;  /* stops img/text stealing the drag */
+}
   .drop-target { outline: 3px dashed rgba(255,255,255,0.85); outline-offset: -6px; border-radius: 12px; }
   .drop-target.dragover { outline-color: #ffd580; background: rgba(255,213,128,0.15); }
 
@@ -246,15 +252,15 @@ Jacob	CM	RM	ST	LM
   const quickPrefVals = [40,50,60,70,80];
 
   const coords = {
-    GK:{x:257,y:350},
-    LB:{x:90, y:275},
-    CB:{x:257,y:275},
-    RB:{x:425,y:275},
-    LM:{x:90, y:170},
-    CM_L:{x:200,y:170},
-    CM_R:{x:315,y:170},
-    RM:{x:425,y:170},
-    ST:{x:257,y:6}
+    GK:{x:50,y:550},
+    LB:{x:90, y:475},
+    CB:{x:150,y:475},
+    RB:{x:210,y:475},
+    LM:{x:70, y:370},
+    CM_L:{x:130,y:370},
+    CM_R:{x:190,y:370},
+    RM:{x:250,y:370},
+    ST:{x:150,y:50}
   };
 
   let players = [];
@@ -2422,6 +2428,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
