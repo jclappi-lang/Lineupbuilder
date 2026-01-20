@@ -190,7 +190,6 @@ Jacob	CM	RM	ST	LM
 
   <button onclick="generateLineup()">Generate Starting Lineup</button>
   <button onclick="generateFullSchedule()">Generate Full Match Schedule</button>
-  <button onclick="calibrateCoords()">Calibrate Positions (drag shirts)</button>
 
   <div id="editorContainer"></div>
 <h3>Formation</h3>
@@ -303,7 +302,7 @@ Jacob	CM	RM	ST	LM
     return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   }
 
-  const SHIRT_OUTFIELD = "Player.PNG";
+  const SHIRT_OUTFIELD = "Player.png";
   const SHIRT_GK       = "Goalkeeper.png";
 
   function initMins(){
@@ -2428,6 +2427,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
