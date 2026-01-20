@@ -211,22 +211,38 @@
   .warn { color: #a40000; font-weight: 700; }
   .ok { color: #0a6a0a; font-weight: 700; }
 
-  /* FORCE shirt label styling (put this at the end of <style>) */
+/* ===== Shirt text: high-contrast readable (put this at END of <style>) ===== */
 .shirt-name,
 .shirt-name .nm,
 .shirt-name .min{
-  color:#0b55ff !important;                 /* blue */
-  -webkit-text-stroke: 2px #fff !important; /* white outline */
-  text-shadow:
-    -2px -2px 0 #fff,  2px -2px 0 #fff,
-    -2px  2px 0 #fff,  2px  2px 0 #fff,
-     0px -2px 0 #fff,  0px  2px 0 #fff,
-    -2px  0px 0 #fff,  2px  0px 0 #fff !important;
+  font-family: Arial, sans-serif;
   font-weight: 900 !important;
+
+  color: #083bff !important;                  /* darker blue */
+
+  /* thinner outline so the blue stays thick */
+  -webkit-text-stroke: 1.2px #ffffff !important;
+
+  /* dark drop shadow for grass contrast + light edge */
+  text-shadow:
+    0 1px 0 rgba(0,0,0,0.35),
+    0 2px 4px rgba(0,0,0,0.45),
+    -1px -1px 0 rgba(255,255,255,0.95),
+     1px -1px 0 rgba(255,255,255,0.95),
+    -1px  1px 0 rgba(255,255,255,0.95),
+     1px  1px 0 rgba(255,255,255,0.95) !important;
 }
 
-.shirt-name{ font-size:18px !important; }
-.shirt-name .min{ font-size:16px !important; }
+.shirt-name{
+  font-size: 20px !important;
+  line-height: 1.05 !important;
+}
+
+.shirt-name .min{
+  font-size: 18px !important;
+  line-height: 1.0 !important;
+  margin-top: 1px;
+}
 
 </style>
 </head>
@@ -2643,6 +2659,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
