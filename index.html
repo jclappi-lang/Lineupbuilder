@@ -158,7 +158,10 @@
     pointer-events: none;
     text-shadow: 0 1px 0 rgba(255,255,255,0.7);
   }
-
+.shirt-wrap.glow {
+  border-radius: 12px;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0), 0 0 16px var(--glow, #00aaff);
+}
   /* ---------- BENCH ---------- */
   #bench { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
   .bench-wrap { position: relative; width: 86px; height: 96px; }
@@ -1670,6 +1673,14 @@ recurse(0, null, null, false, 0, initBench);
 
     const isGK = slot === "GK";
     const el = makeShirtEl({ name }, isGK);
+    const c = glowMap[name];
+if (c){
+  el.classList.add("glow");
+  el.style.setProperty("--glow", c);
+} else {
+  el.classList.remove("glow");
+  el.style.removeProperty("--glow");
+}
 
     // dataset tags so drag/drop can identify where this shirt came from
     el.dataset.playerName = name;
@@ -1689,7 +1700,14 @@ recurse(0, null, null, false, 0, initBench);
     wrap.className = "bench-wrap";
 
     const el = makeShirtEl(p, false);
-
+    const c = glowMap[name];
+if (c){
+  el.classList.add("glow");
+  el.style.setProperty("--glow", c);
+} else {
+  el.classList.remove("glow");
+  el.style.removeProperty("--glow");
+}
     // dataset tags so drag/drop can identify this as bench
     el.dataset.playerName = p.name;
     el.dataset.area = "bench";
@@ -1727,6 +1745,35 @@ recurse(0, null, null, false, 0, initBench);
     wrap.appendChild(name);
     return wrap;
   }
+function buildGlowMapForSelectedPeriod(){
+  glowMap = {};
+  if (!currentSchedule || !currentSchedule.length) return;
+
+  // For period 0, there is no "change boundary" before it
+  if (selectedSegmentIndex <= 0) return;
+
+  const prev = currentSchedule[selectedSegmentIndex - 1]?.lineup;
+  const curr = currentSchedule[selectedSegmentIndex]?.lineup;
+  if (!prev || !curr) return;
+
+  const prevSet = new Set(Object.values(prev));
+  const currSet = new Set(Object.values(curr));
+
+  // ignore GK swap conceptually (GK locked anyway)
+  prevSet.delete(prev.GK);
+  currSet.delete(curr.GK);
+
+  const off = [...prevSet].filter(n => !currSet.has(n)).sort();
+  const on  = [...currSet].filter(n => !prevSet.has(n)).sort();
+
+  // Pair off[i] with on[i] and assign palette colors
+  const pairs = Math.min(off.length, on.length);
+  for (let i=0; i<pairs; i++){
+    const color = glowPalette[i % glowPalette.length];
+    glowMap[off[i]] = color;
+    glowMap[on[i]] = color;
+  }
+}
 function calibrateCoords(){
   // Put dummy shirts on pitch that you can drag to set coords
   document.querySelectorAll(".shirt-wrap").forEach(n => n.remove());
@@ -1882,6 +1929,8 @@ function renderLineupSnapshots(schedule){
   let currentSchedule = null;
   let selectedSegmentIndex = 0;
   let scheduleMode = "minutes";
+  let glowMap = {}; // name -> color string (e.g. "#00aaff")
+  const glowPalette = ["#00aaff", "#ffd400", "#ff4fd8", "#7CFF6B", "#ff7a00", "#9b5cff", "#00ffd5"];
 
   if (typeof escapeHtml !== "function"){
     window.escapeHtml = function(str){
@@ -2015,10 +2064,13 @@ function renderLineupSnapshots(schedule){
 
   function selectSegment(i){
   selectedSegmentIndex = i;
+
+  buildGlowMapForSelectedPeriod(); // NEW
+
   const seg = currentSchedule?.[selectedSegmentIndex];
   if (seg) renderPitchFromLineup(seg.lineup);
 
-  renderPeriodTabs();          // NEW
+  renderPeriodTabs();
   refreshScheduleViews();
   enableDragEditForCurrentPeriod();
 }
@@ -2395,6 +2447,7 @@ function generateFullSchedule_impl(){
   selectedSegmentIndex = 0;
   scheduleMode = "minutes";
   scheduleEditActive = true;
+  buildGlowMapForSelectedPeriod();
   renderPeriodTabs();
 
   const changes = buildChangeRows(currentSchedule);
@@ -2462,6 +2515,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
