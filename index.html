@@ -158,10 +158,21 @@
     pointer-events: none;
     text-shadow: 0 1px 0 rgba(255,255,255,0.7);
   }
+/* Strong glow for paired subs */
 .shirt-wrap.glow {
-  border-radius: 12px;
-  box-shadow: 0 0 0 3px rgba(0,0,0,0), 0 0 16px var(--glow, #00aaff);
+  filter: drop-shadow(0 0 10px rgba(255,255,255,0.7)) drop-shadow(0 0 18px currentColor);
 }
+
+.shirt-wrap.glow::after{
+  content:"";
+  position:absolute;
+  inset:6px;
+  border-radius:14px;
+  border:4px solid currentColor;
+  box-shadow: 0 0 14px currentColor, 0 0 26px currentColor;
+  pointer-events:none;
+}
+
   /* ---------- BENCH ---------- */
   #bench { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
   .bench-wrap { position: relative; width: 86px; height: 96px; }
@@ -1745,33 +1756,32 @@ if (c){
     wrap.appendChild(name);
     return wrap;
   }
-function buildGlowMapForSelectedPeriod(){
+function rebuildGlowMapForSelectedInterval(){
   glowMap = {};
-  if (!currentSchedule || !currentSchedule.length) return;
+  if (!currentSchedule || currentSchedule.length < 2) return;
 
-  // For period 0, there is no "change boundary" before it
-  if (selectedSegmentIndex <= 0) return;
+  const idx = selectedSegmentIndex || 0;
+  if (idx <= 0) return; // no "change" at first segment
 
-  const prev = currentSchedule[selectedSegmentIndex - 1]?.lineup;
-  const curr = currentSchedule[selectedSegmentIndex]?.lineup;
-  if (!prev || !curr) return;
+  const prev = currentSchedule[idx-1].lineup;
+  const curr = currentSchedule[idx].lineup;
 
   const prevSet = new Set(Object.values(prev));
   const currSet = new Set(Object.values(curr));
 
-  // ignore GK swap conceptually (GK locked anyway)
+  // ignore GK in glow pairing (optional)
   prevSet.delete(prev.GK);
   currSet.delete(curr.GK);
 
   const off = [...prevSet].filter(n => !currSet.has(n)).sort();
   const on  = [...currSet].filter(n => !prevSet.has(n)).sort();
 
-  // Pair off[i] with on[i] and assign palette colors
   const pairs = Math.min(off.length, on.length);
+
   for (let i=0; i<pairs; i++){
     const color = glowPalette[i % glowPalette.length];
     glowMap[off[i]] = color;
-    glowMap[on[i]] = color;
+    glowMap[on[i]]  = color;   // <<< key bit: same color for the player coming on
   }
 }
 function calibrateCoords(){
@@ -2515,6 +2525,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
