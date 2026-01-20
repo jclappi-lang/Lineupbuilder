@@ -48,6 +48,25 @@
     width:160px;
     font-size:12px;
   }
+.period-tabs{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:center;
+}
+.period-tabs button{
+  padding:6px 10px;
+  border:1px solid #333;
+  background:#fff;
+  cursor:pointer;
+  border-radius:6px;
+  font-weight:700;
+  font-size:12px;
+}
+.period-tabs button.active{
+  background:#333;
+  color:#fff;
+}
 
   /* Preferred minutes input + buttons */
   .pref-wrap{
@@ -193,8 +212,8 @@ Jacob	CM	RM	ST	LM
 
   <div id="editorContainer"></div>
 <h3>Formation</h3>
-
-  <div id="pitch-container">
+<div id="periodTabs" class="period-tabs" style="margin:10px 0;"></div>
+<div id="pitch-container">
     <div id="pitch">
       <div class="halfway"></div>
       <div class="centre-circle"></div>
@@ -259,7 +278,7 @@ Jacob	CM	RM	ST	LM
     CM_L:{x:105,y:250},
     CM_R:{x:205,y:250},
     RM:{x:305,y:250},
-    ST:{x:158,y:80}
+    ST:{x:158,y:100}
   };
 
   let players = [];
@@ -1955,9 +1974,6 @@ function renderLineupSnapshots(schedule){
       <h4>Manual Edit</h4>
       <div class="panel">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <label><b>Edit interval:</b>
-            <select onchange="selectSegment(+this.value)">${opts}</select>
-          </label>
           <small style="opacity:.75">Pick an interval, choose a slot & player, Apply. Out-of-position is allowed and will be highlighted.</small>
         </div>
 
@@ -1981,13 +1997,32 @@ function renderLineupSnapshots(schedule){
     `;
   }
 
-  function selectSegment(i){
-    selectedSegmentIndex = i;
-    const seg = currentSchedule?.[selectedSegmentIndex];
-    if (seg) renderPitchFromLineup(seg.lineup);
-    refreshScheduleViews();
-    enableDragEditForCurrentPeriod();
+  function renderPeriodTabs(){
+  const wrap = document.getElementById("periodTabs");
+  if (!wrap) return;
+
+  // Only show tabs when we have a schedule
+  if (!currentSchedule || !currentSchedule.length){
+    wrap.innerHTML = "";
+    return;
   }
+
+  wrap.innerHTML = currentSchedule.map((s,i)=>{
+    const label = `${s.start}'–${s.end}'`;
+    const active = (i === selectedSegmentIndex) ? "active" : "";
+    return `<button type="button" class="${active}" onclick="selectSegment(${i})">${label}</button>`;
+  }).join("");
+}
+
+  function selectSegment(i){
+  selectedSegmentIndex = i;
+  const seg = currentSchedule?.[selectedSegmentIndex];
+  if (seg) renderPitchFromLineup(seg.lineup);
+
+  renderPeriodTabs();          // NEW
+  refreshScheduleViews();
+  enableDragEditForCurrentPeriod();
+}
 
   function refreshScheduleViews(){
     if (!currentSchedule) return;
@@ -2361,6 +2396,7 @@ function generateFullSchedule_impl(){
   selectedSegmentIndex = 0;
   scheduleMode = "minutes";
   scheduleEditActive = true;
+  renderPeriodTabs();
 
   const changes = buildChangeRows(currentSchedule);
   const snapshotsHtml = renderLineupSnapshots(currentSchedule);
@@ -2374,7 +2410,7 @@ function generateFullSchedule_impl(){
       warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("") +
       `</ul></div>`;
   }
-
+  
   html += `
     <table>
       <tr><th>Time</th><th>Subbed Off</th><th>Subbed On</th></tr>
@@ -2427,6 +2463,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
