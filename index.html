@@ -140,27 +140,48 @@
   .shirt-img { width: 100%; height: 100%; display: block; }
 
   .shirt-name {
-    position: absolute;
-    left: 10px;
-    right: 10px;
-    top: 36px;
-    bottom: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    font-weight: 800;
-    font-size: 13px;
-    line-height: 1.05;
-    color: #111;
-    word-break: break-word;
-    overflow: hidden;
-    pointer-events: none;
-    text-shadow: 0 1px 0 rgba(255,255,255,0.7);
-  }
+  position: absolute;
+  left: -6px;      /* allow it to spill slightly for readability */
+  right: -6px;
+  top: 18px;
+  bottom: 10px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 1.05;
+
+  color: #0b55ff;                 /* blue text */
+  -webkit-text-stroke: 2px #fff;  /* white outline (Chrome/Edge) */
+
+  /* fallback outline */
+  text-shadow:
+    -2px -2px 0 #fff,  2px -2px 0 #fff,
+    -2px  2px 0 #fff,  2px  2px 0 #fff,
+     0px -2px 0 #fff,  0px  2px 0 #fff,
+    -2px  0px 0 #fff,  2px  0px 0 #fff;
+
+  overflow: visible;              /* don't crop */
+  pointer-events: none;
+}
+
+.shirt-name .min {
+  font-size: 16px;
+  font-weight: 900;
+}
+
 /* Strong glow for paired subs */
+/* Strong glow for paired subs (decoupled from text color) */
 .shirt-wrap.glow {
-  filter: drop-shadow(0 0 10px rgba(255,255,255,0.7)) drop-shadow(0 0 18px currentColor);
+  filter:
+    drop-shadow(0 0 10px rgba(255,255,255,0.7))
+    drop-shadow(0 0 18px var(--glow, #00aaff));
 }
 
 .shirt-wrap.glow::after{
@@ -168,8 +189,8 @@
   position:absolute;
   inset:6px;
   border-radius:14px;
-  border:4px solid currentColor;
-  box-shadow: 0 0 14px currentColor, 0 0 26px currentColor;
+  border:4px solid var(--glow, #00aaff);
+  box-shadow: 0 0 14px var(--glow, #00aaff), 0 0 26px var(--glow, #00aaff);
   pointer-events:none;
 }
 
@@ -189,6 +210,23 @@
 
   .warn { color: #a40000; font-weight: 700; }
   .ok { color: #0a6a0a; font-weight: 700; }
+
+  /* FORCE shirt label styling (put this at the end of <style>) */
+.shirt-name,
+.shirt-name .nm,
+.shirt-name .min{
+  color:#0b55ff !important;                 /* blue */
+  -webkit-text-stroke: 2px #fff !important; /* white outline */
+  text-shadow:
+    -2px -2px 0 #fff,  2px -2px 0 #fff,
+    -2px  2px 0 #fff,  2px  2px 0 #fff,
+     0px -2px 0 #fff,  0px  2px 0 #fff,
+    -2px  0px 0 #fff,  2px  0px 0 #fff !important;
+  font-weight: 900 !important;
+}
+
+.shirt-name{ font-size:18px !important; }
+.shirt-name .min{ font-size:16px !important; }
 
 </style>
 </head>
@@ -1686,23 +1724,29 @@ recurse(0, null, null, false, 0, initBench);
 
     const isGK = slot === "GK";
     const el = makeShirtEl({ name }, isGK);
-    const label = `${name}\n${liveMins[name] || 0}m`;
-    const nameEl = el.querySelector(".shirt-name");
-    if (nameEl) nameEl.textContent = label;
 
-    // Glow (paired subs): uses currentColor from CSS
+    // Label: name on line 1, minutes number on line 2
+    const nameEl = el.querySelector(".shirt-name");
+    if (nameEl) {
+      nameEl.innerHTML =
+        `<div class="nm">${escapeHtml(name)}</div>` +
+        `<div class="min">${(liveMins[name] || 0)}</div>`;
+    }
+
+    // Glow (paired subs) using CSS variable --glow
     const g = glowMap[name];
     el.classList.toggle("glow", !!g);
-    el.style.color = g ? g : "";
+    if (g) el.style.setProperty("--glow", g);
+    else el.style.removeProperty("--glow");
 
     // dataset tags so drag/drop can identify where this shirt came from
     el.dataset.playerName = name;
     el.dataset.area = "pitch";
     el.dataset.slot = slot;
+
     el.style.left = coords[slot].x + "px";
     el.style.top  = coords[slot].y + "px";
     document.getElementById("pitch-container").appendChild(el);
-    requestAnimationFrame(() => fitTextToBox(el.querySelector(".shirt-name"), 66, 42, 14, 9));
   });
 
   // --- Bench shirts ---
@@ -1712,27 +1756,29 @@ recurse(0, null, null, false, 0, initBench);
     wrap.className = "bench-wrap";
 
     const el = makeShirtEl({ name: p.name }, false);
-    const label = `${p.name}\n${liveMins[p.name] || 0}m`;
-    const nameEl = el.querySelector(".shirt-name");
-    if (nameEl) nameEl.textContent = label;
 
-    // Glow (paired subs)
+    const nameEl = el.querySelector(".shirt-name");
+    if (nameEl) {
+      nameEl.innerHTML =
+        `<div class="nm">${escapeHtml(p.name)}</div>` +
+        `<div class="min">${(liveMins[p.name] || 0)}</div>`;
+    }
+
     const g = glowMap[p.name];
     el.classList.toggle("glow", !!g);
-    el.style.color = g ? g : "";
+    if (g) el.style.setProperty("--glow", g);
+    else el.style.removeProperty("--glow");
 
-    // dataset tags so drag/drop can identify this as bench
     el.dataset.playerName = p.name;
     el.dataset.area = "bench";
     el.dataset.slot = "BENCH";
 
     el.style.position = "relative";
     el.style.left = "0px";
-    el.style.top = "0px";
+    el.style.top  = "0px";
 
     wrap.appendChild(el);
     document.getElementById("bench").appendChild(wrap);
-    requestAnimationFrame(() => fitTextToBox(el.querySelector(".shirt-name"), 66, 42, 13, 9));
   });
 
   // If schedule editing is active, re-enable drag/drop after re-render
@@ -2597,6 +2643,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
