@@ -2446,9 +2446,9 @@ function generateFullSchedule_impl(){
     lineup: { ...s.lineup }
   }));
   selectedSegmentIndex = 0;
+  rebuildGlowMapForSelectedInterval();
   scheduleMode = "minutes";
   scheduleEditActive = true;
-  buildGlowMapForSelectedPeriod();
   renderPeriodTabs();
 
   const changes = buildChangeRows(currentSchedule);
@@ -2516,6 +2516,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
