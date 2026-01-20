@@ -90,8 +90,8 @@
 
   #pitch {
   position: absolute;
-  width: 100%;
-  height: 100%;
+  width: 50%;
+  height: 50%;
   background: url("Pitch.JPG") center/cover no-repeat;
   border: 0;
   box-sizing: border-box;
@@ -295,8 +295,8 @@ Jacob	CM	RM	ST	LM
     return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
   }
 
-  const SHIRT_OUTFIELD = makeShirtDataURI({ fill:"#ffffff", stroke:"#111111", collar:"#ededed" });
-  const SHIRT_GK       = makeShirtDataURI({ fill:"#f3c623", stroke:"#111111", collar:"#ffe08a" });
+  const SHIRT_OUTFIELD = "Player.PNG";
+  const SHIRT_GK       = "Goalkeeper.PNG";
 
   function initMins(){
     const m = {};
@@ -2367,4 +2367,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
