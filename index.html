@@ -1672,8 +1672,7 @@ recurse(0, null, null, false, 0, initBench);
   return rows;
 }
 
-
-  function renderPitchFromLineup(lineup){
+ function renderPitchFromLineup(lineup){
   document.querySelectorAll(".shirt-wrap").forEach(n => n.remove());
   document.getElementById("bench").innerHTML = "";
 
@@ -1684,14 +1683,11 @@ recurse(0, null, null, false, 0, initBench);
 
     const isGK = slot === "GK";
     const el = makeShirtEl({ name }, isGK);
-    const c = glowMap[name];
-if (c){
-  el.classList.add("glow");
-  el.style.setProperty("--glow", c);
-} else {
-  el.classList.remove("glow");
-  el.style.removeProperty("--glow");
-}
+
+    // Glow (paired subs): uses currentColor from CSS
+    const g = glowMap[name];
+    el.classList.toggle("glow", !!g);
+    el.style.color = g ? g : "";
 
     // dataset tags so drag/drop can identify where this shirt came from
     el.dataset.playerName = name;
@@ -1710,15 +1706,13 @@ if (c){
     const wrap = document.createElement("div");
     wrap.className = "bench-wrap";
 
-    const el = makeShirtEl(p, false);
-    const c = glowMap[name];
-if (c){
-  el.classList.add("glow");
-  el.style.setProperty("--glow", c);
-} else {
-  el.classList.remove("glow");
-  el.style.removeProperty("--glow");
-}
+    const el = makeShirtEl({ name: p.name }, false);
+
+    // Glow (paired subs)
+    const g = glowMap[p.name];
+    el.classList.toggle("glow", !!g);
+    el.style.color = g ? g : "";
+
     // dataset tags so drag/drop can identify this as bench
     el.dataset.playerName = p.name;
     el.dataset.area = "bench";
@@ -2525,6 +2519,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
