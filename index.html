@@ -1755,29 +1755,77 @@ function rebuildGlowMapForSelectedInterval(){
   if (!currentSchedule || currentSchedule.length < 2) return;
 
   const idx = selectedSegmentIndex || 0;
-  if (idx <= 0) return; // no "change" at first segment
+  if (idx <= 0) return; // no change boundary before the first segment
 
-  const prev = currentSchedule[idx-1].lineup;
+  const prev = currentSchedule[idx - 1].lineup;
   const curr = currentSchedule[idx].lineup;
+  if (!prev || !curr) return;
 
-  const prevSet = new Set(Object.values(prev));
-  const currSet = new Set(Object.values(curr));
+  // Helper: map player -> slot in a lineup
+  function playerToSlotMap(lineup){
+    const m = {};
+    for (const s of slots){
+      const n = lineup[s];
+      if (n) m[n] = s;
+    }
+    return m;
+  }
 
-  // ignore GK in glow pairing (optional)
-  prevSet.delete(prev.GK);
-  currSet.delete(curr.GK);
+  const prevP2S = playerToSlotMap(prev);
+  const currP2S = playerToSlotMap(curr);
 
-  const off = [...prevSet].filter(n => !currSet.has(n)).sort();
-  const on  = [...currSet].filter(n => !prevSet.has(n)).sort();
+  // Determine actual "subs": players leaving pitch vs entering pitch (ignore pure position swaps)
+  const prevOn = new Set(Object.values(prev));
+  const currOn = new Set(Object.values(curr));
+  prevOn.delete(prev.GK);
+  currOn.delete(curr.GK);
 
-  const pairs = Math.min(off.length, on.length);
+  const offPlayers = [...prevOn].filter(n => !currOn.has(n));
+  const onPlayers  = [...currOn].filter(n => !prevOn.has(n));
+
+  // Slot-based pairing:
+  // For each slot where lineup changed, if that change corresponds to an OFF + ON, pair them.
+  const usedOff = new Set();
+  const usedOn  = new Set();
+  let colorIndex = 0;
+
+  for (const s of slots){
+    if (s === "GK") continue;
+
+    const a = prev[s];
+    const b = curr[s];
+    if (!a || !b) continue;
+    if (a === b) continue; // no change in this slot
+
+    // only treat as a substitution if 'a' actually went off and 'b' actually came on
+    const aIsOff = offPlayers.includes(a);
+    const bIsOn  = onPlayers.includes(b);
+
+    if (aIsOff && bIsOn && !usedOff.has(a) && !usedOn.has(b)){
+      const color = glowPalette[colorIndex % glowPalette.length];
+      colorIndex++;
+
+      glowMap[a] = color;
+      glowMap[b] = color;
+
+      usedOff.add(a);
+      usedOn.add(b);
+    }
+  }
+
+  // Any remaining off/on (rare edge cases) → pair arbitrarily so they still glow
+  const offRem = offPlayers.filter(n => !usedOff.has(n));
+  const onRem  = onPlayers.filter(n => !usedOn.has(n));
+  const pairs = Math.min(offRem.length, onRem.length);
 
   for (let i=0; i<pairs; i++){
-    const color = glowPalette[i % glowPalette.length];
-    glowMap[off[i]] = color;
-    glowMap[on[i]]  = color;   // <<< key bit: same color for the player coming on
+    const color = glowPalette[colorIndex % glowPalette.length];
+    colorIndex++;
+    glowMap[offRem[i]] = color;
+    glowMap[onRem[i]]  = color;
   }
 }
+
 function calibrateCoords(){
   // Put dummy shirts on pitch that you can drag to set coords
   document.querySelectorAll(".shirt-wrap").forEach(n => n.remove());
@@ -2145,6 +2193,10 @@ function afterScheduleEdit(){
 
   // Also keep totals correct
   if (typeof updateTotals === "function") updateTotals();
+
+  rebuildGlowMapForSelectedInterval();
+  renderPitchFromLineup(currentSchedule[selectedSegmentIndex].lineup);
+
 }
 
 function enableDragEditForCurrentPeriod(){
@@ -2244,33 +2296,24 @@ function findPlayerSlot(lineup, name){
 
 // After any edit: rerender pitch+bench, keep dragging alive, and (optionally) update table
 function afterScheduleEdit(){
-  const seg = currentSchedule[selectedSegmentIndex];
-  renderPitchFromLineup(seg.lineup);     // this will call enableDragEditForCurrentPeriod() again
-  refreshScheduleViews?.();
+  // 1) Update glow pairs for the currently selected boundary
+  rebuildGlowMapForSelectedInterval();
 
-  // If you want edits to feed back into the minutes table immediately:
-  fillMinutesFromSchedule(currentSchedule);
-  renderTable();
+  // 2) Re-render pitch/bench for the selected period
+  const seg = currentSchedule?.[selectedSegmentIndex];
+  if (seg) renderPitchFromLineup(seg.lineup);
+
+  // 3) Refresh UI blocks (changes table, snapshots, tabs)
+  if (typeof refreshScheduleViews === "function") refreshScheduleViews();
+  if (typeof renderPeriodTabs === "function") renderPeriodTabs();
+
+  // 4) Feed edits back into minutes table (optional but you wanted feedback)
+  if (typeof fillMinutesFromSchedule === "function") fillMinutesFromSchedule(currentSchedule);
+  if (typeof renderTable === "function") renderTable();
+
+  // 5) Ensure drag never "locks"
+  if (typeof enableDragEditForCurrentPeriod === "function") enableDragEditForCurrentPeriod();
 }
-
-function findPlayerSlot(lineup, name){
-  for (const slot of slots){
-    if (lineup[slot] === name) return slot;
-  }
-  return null;
-}
-
-// After any edit: rerender pitch+bench, keep dragging alive, and (optionally) update table
-function afterScheduleEdit(){
-  const seg = currentSchedule[selectedSegmentIndex];
-  renderPitchFromLineup(seg.lineup);     // this will call enableDragEditForCurrentPeriod() again
-  refreshScheduleViews?.();
-
-  // If you want edits to feed back into the minutes table immediately:
-  fillMinutesFromSchedule(currentSchedule);
-  renderTable();
-}
-
 
 function findSlotOfName(lineup, name){
   for (const slot of slots){
@@ -2516,6 +2559,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
