@@ -2068,16 +2068,13 @@ function renderLineupSnapshots(schedule){
 
   function selectSegment(i){
   selectedSegmentIndex = i;
-
-  buildGlowMapForSelectedPeriod(); // NEW
-
+  rebuildGlowMapForSelectedInterval();
   const seg = currentSchedule?.[selectedSegmentIndex];
   if (seg) renderPitchFromLineup(seg.lineup);
-
-  renderPeriodTabs();
   refreshScheduleViews();
   enableDragEditForCurrentPeriod();
 }
+
 
   function refreshScheduleViews(){
     if (!currentSchedule) return;
@@ -2519,6 +2516,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
