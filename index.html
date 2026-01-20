@@ -100,6 +100,8 @@
   }
 
   /* ---------- HALF PITCH (DEFENSIVE) ---------- */
+  <div id="liveTotalsPanel" class="panel" style="max-width:600px;"></div>
+  
   #pitch-container {
     position: relative;
     width: 400px;
@@ -1676,6 +1678,8 @@ recurse(0, null, null, false, 0, initBench);
   document.querySelectorAll(".shirt-wrap").forEach(n => n.remove());
   document.getElementById("bench").innerHTML = "";
 
+  const liveMins = currentSchedule ? computeMinutesFromSchedule(currentSchedule) : {};
+
   // --- Pitch shirts ---
   slots.forEach(slot => {
     const name = lineup[slot];
@@ -1683,6 +1687,9 @@ recurse(0, null, null, false, 0, initBench);
 
     const isGK = slot === "GK";
     const el = makeShirtEl({ name }, isGK);
+    const label = `${name}\n${liveMins[name] || 0}m`;
+    const nameEl = el.querySelector(".shirt-name");
+    if (nameEl) nameEl.textContent = label;
 
     // Glow (paired subs): uses currentColor from CSS
     const g = glowMap[name];
@@ -1693,6 +1700,7 @@ recurse(0, null, null, false, 0, initBench);
     el.dataset.playerName = name;
     el.dataset.area = "pitch";
     el.dataset.slot = slot;
+    const mins = currentSchedule ? computeMinutesFromSchedule(currentSchedule) : null;
 
     el.style.left = coords[slot].x + "px";
     el.style.top  = coords[slot].y + "px";
@@ -1707,6 +1715,9 @@ recurse(0, null, null, false, 0, initBench);
     wrap.className = "bench-wrap";
 
     const el = makeShirtEl({ name: p.name }, false);
+    const label = `${name}\n${liveMins[name] || 0}m`;
+    const nameEl = el.querySelector(".shirt-name");
+    if (nameEl) nameEl.textContent = label;
 
     // Glow (paired subs)
     const g = glowMap[p.name];
@@ -1826,6 +1837,62 @@ function rebuildGlowMapForSelectedInterval(){
   }
 }
 
+function computeMinutesFromSchedule(schedule){
+  const mins = {};
+  players.forEach(p => mins[p.name] = 0);
+
+  if (!schedule || !schedule.length) return mins;
+
+  for (const seg of schedule){
+    // every player on pitch (including GK) gets seg minutes
+    const on = new Set(Object.values(seg.lineup || {}));
+    for (const name of on){
+      mins[name] = (mins[name] || 0) + (seg.tickLen * 10);
+    }
+  }
+  return mins;
+}
+
+function renderLiveTotalsPanel(){
+  const box = document.getElementById("liveTotalsPanel");
+  if (!box) return;
+
+  if (!currentSchedule || !currentSchedule.length){
+    box.innerHTML = "";
+    return;
+  }
+
+  const mins = computeMinutesFromSchedule(currentSchedule);
+
+  // Sort by name (or by minutes — change if you prefer)
+  const rows = players
+    .map(p => ({ name: p.name, mins: mins[p.name] || 0, pref: p.preferred || 0 }))
+    .sort((a,b)=> a.name.localeCompare(b.name));
+
+  box.innerHTML = `
+    <h4 style="margin:0 0 6px 0;">Live Minutes (from schedule)</h4>
+    <small style="opacity:.75;display:block;margin-bottom:8px;">
+      Updates immediately when you drag/edit an interval.
+    </small>
+    <table style="margin:0;">
+      <tr><th style="text-align:left;">Player</th><th>Live</th><th>Preferred</th><th>Diff</th></tr>
+      ${rows.map(r=>{
+        const diff = r.mins - r.pref;
+        const cls = (r.mins===0) ? "" : (diff===0 ? "green" : (Math.abs(diff)<=10 ? "orange" : "red"));
+        const sign = diff>0 ? "+" : "";
+        return `
+          <tr>
+            <td style="text-align:left;">${escapeHtml(r.name)}</td>
+            <td class="${cls}"><b>${r.mins}</b></td>
+            <td>${r.pref}</td>
+            <td class="${cls}">${sign}${diff}</td>
+          </tr>
+        `;
+      }).join("")}
+    </table>
+  `;
+}
+  
 function calibrateCoords(){
   // Put dummy shirts on pitch that you can drag to set coords
   document.querySelectorAll(".shirt-wrap").forEach(n => n.remove());
@@ -2196,7 +2263,7 @@ function afterScheduleEdit(){
 
   rebuildGlowMapForSelectedInterval();
   renderPitchFromLineup(currentSchedule[selectedSegmentIndex].lineup);
-
+  renderLiveTotalsPanel();
 }
 
 function enableDragEditForCurrentPeriod(){
@@ -2498,6 +2565,8 @@ function generateFullSchedule_impl(){
   const snapshotsHtml = renderLineupSnapshots(currentSchedule);
   const editorHtml = renderScheduleEditor();
 
+  renderLiveTotalsPanel();
+
   let html = `<div id="changesBlock"><h4>Interval Changes</h4>`;
   html += `<div class="ok">Schedule built successfully. GK locked: <b>${escapeHtml(gkName)}</b></div>`;
 
@@ -2559,6 +2628,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
