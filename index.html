@@ -79,20 +79,22 @@
     background:#333;
     color:#fff;
   }
+<button onclick="calibrateCoords()">Calibrate Positions (drag shirts)</button>
 
   /* ---------- HALF PITCH (DEFENSIVE) ---------- */
   #pitch-container {
     position: relative;
     width: 600px;
-    height: 320px; 
+    height: 460px; 
     margin-top: 16px;
   }
 
   #pitch {
   position: absolute;
-  width: 50%;
-  height: 50%;
-  background: url("Pitch.JPG") center/cover no-repeat;
+  width: 100%;
+  height: 100%;
+  background: url("PitchFull.JPG") center/contain no-repeat;
+  background-color: #2e8b57; /* shows behind any empty space */
   border: 0;
   box-sizing: border-box;
   overflow: hidden;
@@ -1701,6 +1703,59 @@ recurse(0, null, null, false, 0, initBench);
     wrap.appendChild(name);
     return wrap;
   }
+function calibrateCoords(){
+  // Put dummy shirts on pitch that you can drag to set coords
+  document.querySelectorAll(".shirt-wrap").forEach(n => n.remove());
+
+  const pitchContainer = document.getElementById("pitch-container");
+
+  slots.forEach(slot => {
+    const isGK = slot === "GK";
+    const el = makeShirtEl({ name: slot }, isGK);
+    el.classList.add("editable");
+    el.style.pointerEvents = "auto";
+    el.style.cursor = "move";
+    el.style.left = (coords[slot]?.x ?? 0) + "px";
+    el.style.top  = (coords[slot]?.y ?? 0) + "px";
+    el.dataset.slot = slot;
+
+    // simple drag
+    let startX=0,startY=0,origX=0,origY=0,dragging=false;
+
+    el.addEventListener("mousedown", (e)=>{
+      dragging = true;
+      startX = e.clientX; startY = e.clientY;
+      origX = parseInt(el.style.left,10)||0;
+      origY = parseInt(el.style.top,10)||0;
+      e.preventDefault();
+    });
+
+    window.addEventListener("mousemove", (e)=>{
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      el.style.left = (origX + dx) + "px";
+      el.style.top  = (origY + dy) + "px";
+    });
+
+    window.addEventListener("mouseup", ()=>{
+      if (!dragging) return;
+      dragging = false;
+
+      const slot = el.dataset.slot;
+      coords[slot] = {
+        x: parseInt(el.style.left,10)||0,
+        y: parseInt(el.style.top,10)||0
+      };
+
+      console.clear();
+      console.log("Updated coords:\n", JSON.stringify(coords, null, 2));
+      alert("Coords updated for " + slot + ". Open DevTools console to copy the full coords object.");
+    });
+
+    pitchContainer.appendChild(el);
+  });
+}
 function renderLineupSnapshots(schedule){
   if (!schedule || !schedule.length) return "";
 
@@ -2367,6 +2422,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
