@@ -18,7 +18,7 @@
   .red { background:#ff8080; }
 
   /* Controls */
-  .controls {
+  .controls{
     display:flex;
     gap:10px;
     flex-wrap:wrap;
@@ -28,45 +28,41 @@
     background:#fafafa;
     margin: 10px 0 14px;
   }
-  .controls label { display:flex; gap:6px; align-items:center; }
-  .controls small { opacity:.75; }
+  .controls label{ display:flex; gap:6px; align-items:center; }
+  .controls small{ opacity:.75; }
 
   /* Name cell + prefs */
-  .name-cell { text-align:left; }
+  .name-cell{ text-align:left; }
   .pref-grid{
     display:grid;
     grid-template-columns: repeat(4, 1fr);
     gap:4px;
     margin-top:6px;
   }
-  .pref-grid select{
-    width:72px;
-    font-size:12px;
-  }
+  .pref-grid select{ width:72px; font-size:12px; }
 
-  .avoid-input{
-    width:160px;
+  .avoid-input{ width:160px; font-size:12px; }
+
+  /* Period tabs */
+  .period-tabs{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    align-items:center;
+  }
+  .period-tabs button{
+    padding:6px 10px;
+    border:1px solid #333;
+    background:#fff;
+    cursor:pointer;
+    border-radius:6px;
+    font-weight:700;
     font-size:12px;
   }
-.period-tabs{
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
-  align-items:center;
-}
-.period-tabs button{
-  padding:6px 10px;
-  border:1px solid #333;
-  background:#fff;
-  cursor:pointer;
-  border-radius:6px;
-  font-weight:700;
-  font-size:12px;
-}
-.period-tabs button.active{
-  background:#333;
-  color:#fff;
-}
+  .period-tabs button.active{
+    background:#333;
+    color:#fff;
+  }
 
   /* Preferred minutes input + buttons */
   .pref-wrap{
@@ -94,172 +90,183 @@
     cursor:pointer;
   }
   .pref-btns button:hover{ background:#f0f0f0; }
-  .pref-btns button.active{
-    background:#333;
-    color:#fff;
+  .pref-btns button.active{ background:#333; color:#fff; }
+
+  /* ---------- 3-COLUMN LAYOUT ---------- */
+  /* Pitch | Live Minutes | Live Snapshots */
+  #pitchRow{
+    display:grid;
+    grid-template-columns: 420px minmax(260px, 1fr) minmax(260px, 1fr);
+    gap:16px;
+    align-items:start;
+  }
+
+  #pitchCol{ width:420px; }
+
+  #minutesCol, #snapshotsCol{
+    min-width:260px;
+  }
+
+  /* keep side panels visible while scrolling */
+  #liveTotalsPanel,
+  #liveSnapshotsPanel{
+    position: sticky;
+    top: 12px;
+  }
+
+  /* optional: snapshot table sizing */
+  #liveSnapshotsPanel table{ width:100%; }
+  #liveSnapshotsPanel th, #liveSnapshotsPanel td{
+    font-size:12px;
+    padding:4px;
   }
 
   /* ---------- HALF PITCH (DEFENSIVE) ---------- */
-  #pitch-container {
+  #pitch-container{
     position: relative;
     width: 400px;
-    height: 650px; 
+    height: 650px;
     margin-top: 16px;
   }
 
-  #pitch {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background: url("Pitch.JPG") center/contain no-repeat;
-  background-color: #2e8b57; /* shows behind any empty space */
-  border: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-}
+  #pitch{
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: url("Pitch.JPG") center/contain no-repeat;
+    background-color: #2e8b57; /* shows behind any empty space */
+    border: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
 
   /* Drag editing */
   /* allow clicking/dragging ONLY when calibrating or editing */
-.shirt-wrap.editable { 
-  pointer-events: auto !important; 
-}
-.shirt-wrap.editable * { 
-  pointer-events: none;  /* stops img/text stealing the drag */
-}
-  .drop-target { outline: 3px dashed rgba(255,255,255,0.85); outline-offset: -6px; border-radius: 12px; }
-  .drop-target.dragover { outline-color: #ffd580; background: rgba(255,213,128,0.15); }
+  .shirt-wrap.editable{ pointer-events:auto !important; }
+  .shirt-wrap.editable *{ pointer-events:none; } /* stops img/text stealing the drag */
+
+  .drop-target{
+    outline: 3px dashed rgba(255,255,255,0.85);
+    outline-offset: -6px;
+    border-radius: 12px;
+  }
+  .drop-target.dragover{
+    outline-color: #ffd580;
+    background: rgba(255,213,128,0.15);
+  }
 
   /* ---------- SHIRTS ---------- */
-  .shirt-wrap {
+  .shirt-wrap{
     position: absolute;
     width: 86px;
     height: 96px;
-    pointer-events: none; /* leave non-draggable */
+    pointer-events: none; /* leave non-draggable until editing */
   }
 
-  .shirt-img { width: 100%; height: 100%; display: block; }
+  .shirt-img{ width:100%; height:100%; display:block; }
 
-  .shirt-name {
-  position: absolute;
-  left: -6px;      /* allow it to spill slightly for readability */
-  right: -6px;
-  top: 18px;
-  bottom: 10px;
+  .shirt-name{
+    position: absolute;
+    left: -6px;
+    right: -6px;
+    top: 18px;
+    bottom: 10px;
 
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: center;
-  justify-content: center;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    align-items:center;
+    justify-content:center;
 
-  text-align: center;
-  font-weight: 1000;
-  font-size: 20px;
-  line-height: 1.05;
+    text-align:center;
+    font-weight: 1000;
+    font-size: 20px;
+    line-height: 1.05;
 
-  color: #0b55ff;                 /* blue text */
-  -webkit-text-stroke: 1px #fff;  /* white outline (Chrome/Edge) */
+    color: #0b55ff;                 /* blue text */
+    -webkit-text-stroke: 1px #fff;  /* white outline (Chrome/Edge) */
 
-  /* fallback outline */
-  text-shadow:
-    -2px -2px 0 #fff,  2px -2px 0 #fff,
-    -2px  2px 0 #fff,  2px  2px 0 #fff,
-     0px -2px 0 #fff,  0px  2px 0 #fff,
-    -2px  0px 0 #fff,  2px  0px 0 #fff;
+    /* fallback outline */
+    text-shadow:
+      -2px -2px 0 #fff,  2px -2px 0 #fff,
+      -2px  2px 0 #fff,  2px  2px 0 #fff,
+       0px -2px 0 #fff,  0px  2px 0 #fff,
+      -2px  0px 0 #fff,  2px  0px 0 #fff;
 
-  overflow: visible;              /* don't crop */
-  pointer-events: none;
-}
+    overflow: visible;
+    pointer-events: none;
+  }
 
-/* Strong glow for paired subs */
-/* Strong glow for paired subs (decoupled from text color) */
-.shirt-wrap.glow {
-  filter:
-    drop-shadow(0 0 5px rgba(255,255,255,0.7))
-    drop-shadow(0 0 10px var(--glow, #00aaff));
-}
-
-.shirt-wrap.glow::after{
-  content:"";
-  position:absolute;
-  inset:6px;
-  border-radius:14px;
-  border:4px solid var(--glow, #00aaff);
-  box-shadow: 0 0 10px var(--glow, #00aaff), 0 0 15px var(--glow, #00aaff);
-  pointer-events:none;
-}
+  /* Strong glow for paired subs (decoupled from text color) */
+  .shirt-wrap.glow{
+    filter:
+      drop-shadow(0 0 5px rgba(255,255,255,0.7))
+      drop-shadow(0 0 10px var(--glow, #00aaff));
+  }
+  .shirt-wrap.glow::after{
+    content:"";
+    position:absolute;
+    inset:6px;
+    border-radius:14px;
+    border:4px solid var(--glow, #00aaff);
+    box-shadow: 0 0 10px var(--glow, #00aaff), 0 0 15px var(--glow, #00aaff);
+    pointer-events:none;
+  }
 
   /* ---------- BENCH ---------- */
-  #bench { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
-  .bench-wrap { position: relative; width: 86px; height: 96px; }
-  .bench-wrap .shirt-name { top: 36px; bottom: 12px; left: 10px; right: 10px; font-size: 12px; }
+  #bench{ display:flex; gap:10px; flex-wrap:wrap; margin-top: 10px; }
+  .bench-wrap{ position: relative; width: 86px; height: 96px; }
+  .bench-wrap .shirt-name{
+    top: 36px;
+    bottom: 12px;
+    left: 10px;
+    right: 10px;
+    font-size: 12px;
+  }
 
   /* ---------- OUTPUT ---------- */
-  .panel {
+  .panel{
     padding: 10px;
     border: 1px solid #333;
     margin: 12px 0;
     background: #fafafa;
   }
-  .panel h4 { margin: 0 0 8px 0; }
+  .panel h4{ margin: 0 0 8px 0; }
 
-  .warn { color: #a40000; font-weight: 700; }
-  .ok { color: #0a6a0a; font-weight: 700; }
+  .warn{ color:#a40000; font-weight:700; }
+  .ok{ color:#0a6a0a; font-weight:700; }
 
-/* ===== Shirt text: high-contrast readable (put this at END of <style>) ===== */
-.shirt-name,
-.shirt-name .nm,
-.shirt-name .min{
-  font-family: Arial, sans-serif;
-  font-weight: 900 !important;
+  /* ===== Shirt text: high-contrast readable (put this at END of <style>) ===== */
+  .shirt-name,
+  .shirt-name .nm,
+  .shirt-name .min{
+    font-family: Arial, sans-serif;
+    font-weight: 900 !important;
+    color: #083bff !important;                  /* darker blue */
 
-  color: #083bff !important;                  /* darker blue */
+    -webkit-text-stroke: 1px #ffffff !important;
 
-  /* thinner outline so the blue stays thick */
-  -webkit-text-stroke: 1px #ffffff !important;
+    text-shadow:
+      0 1px 0 rgba(0,0,0,0.35),
+      0 2px 4px rgba(0,0,0,0.45),
+      -1px -1px 0 rgba(255,255,255,0.95),
+       1px -1px 0 rgba(255,255,255,0.95),
+      -1px  1px 0 rgba(255,255,255,0.95),
+       1px  1px 0 rgba(255,255,255,0.95) !important;
+  }
 
-  /* dark drop shadow for grass contrast + light edge */
-  text-shadow:
-    0 1px 0 rgba(0,0,0,0.35),
-    0 2px 4px rgba(0,0,0,0.45),
-    -1px -1px 0 rgba(255,255,255,0.95),
-     1px -1px 0 rgba(255,255,255,0.95),
-    -1px  1px 0 rgba(255,255,255,0.95),
-     1px  1px 0 rgba(255,255,255,0.95) !important;
-}
+  .shirt-name{
+    font-size: 20px !important;
+    line-height: 1.05 !important;
+  }
 
-.shirt-name{
-  font-size: 20px !important;
-  line-height: 1.05 !important;
-}
-
-.shirt-name .min{
-  font-size: 18px !important;
-  line-height: 1.0 !important;
-  margin-top: 1px;
-}
- #pitchAndMinutes{
-  display:flex;
-  gap:16px;
-  align-items:flex-start;
-}
-
-#pitchCol{
-  flex: 0 0 auto;
-}
-
-#minutesCol{
-  flex: 1 1 320px;
-  min-width: 260px;
-  max-width: 420px;
-}
-
-#liveMinutesPanel{
-  position: sticky;
-  top: 12px;
-} 
-
+  .shirt-name .min{
+    font-size: 18px !important;
+    line-height: 1.0 !important;
+    margin-top: 1px;
+  }
 </style>
+
 </head>
 
 <body>
@@ -316,11 +323,17 @@ Jacob	CM	RM	ST	LM
     <div id="bench"></div>
   </div>
 
-  <!-- RIGHT: live minutes panel -->
+  <!-- MIDDLE: live minutes -->
   <div id="minutesCol">
     <div id="liveTotalsPanel" class="panel"></div>
   </div>
+
+  <!-- RIGHT: live snapshots -->
+  <div id="snapshotsCol">
+    <div id="liveSnapshotsPanel" class="panel"></div>
+  </div>
 </div>
+
 
 <div id="scheduleContainer" class="panel" style="display:none;"></div>
 <div id="errorBox" class="panel" style="display:none;border:2px solid #a40000;background:#fff0f0;"></div>
@@ -1978,6 +1991,17 @@ function renderLiveTotalsPanel(){
     </table>
   `;
 }
+function renderLiveSnapshotsPanel(){
+  const box = document.getElementById("liveSnapshotsPanel");
+  if (!box) return;
+
+  if (!currentSchedule || !currentSchedule.length){
+    box.innerHTML = "";
+    return;
+  }
+
+  box.innerHTML = renderLineupSnapshots(currentSchedule);
+}
   
 function calibrateCoords(){
   // Put dummy shirts on pitch that you can drag to set coords
@@ -2273,6 +2297,7 @@ function renderLineupSnapshots(schedule){
   const seg = currentSchedule?.[selectedSegmentIndex];
   if (seg) renderPitchFromLineup(seg.lineup);
   refreshScheduleViews();
+  renderLiveSnapshotsPanel();
   enableDragEditForCurrentPeriod();
 }
 function blockId20(seg){
@@ -2464,7 +2489,8 @@ function afterScheduleEdit(changedSlots = []){
   // Recompute minutes from the whole schedule + update table + live panel
   if (typeof fillMinutesFromSchedule === "function") fillMinutesFromSchedule(currentSchedule);
   if (typeof renderTable === "function") renderTable();
-  if (typeof renderLiveTotalsPanel === "function") renderLiveTotalsPanel(); // only if you have it
+  if (typeof renderLiveTotalsPanel === "function") renderLiveTotalsPanel();
+  if (typeof renderLiveSnapshotsPanel === "function") renderLiveSnapshotsPanel();
 
   // Re-render pitch for the currently selected segment
   const seg = currentSchedule?.[selectedSegmentIndex];
@@ -2675,6 +2701,7 @@ function generateFullSchedule_impl(){
   const editorHtml = renderScheduleEditor();
 
   renderLiveTotalsPanel();
+  renderLiveSnapshotsPanel();
 
   let html = `<div id="changesBlock"><h4>Interval Changes</h4>`;
   html += `<div class="ok">Schedule built successfully. GK locked: <b>${escapeHtml(gkName)}</b></div>`;
@@ -2731,6 +2758,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
