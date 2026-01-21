@@ -120,6 +120,39 @@
     font-size:12px;
     padding:4px;
   }
+/* Middle column split: Live Minutes | Interval Changes */
+#midSplit{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+/* Let each panel stick independently while scrolling */
+#liveTotalsPanel,
+#intervalChangesPanel{
+  position: sticky;
+  top: 12px;
+}
+
+/* Optional: make interval changes table more compact */
+#intervalChangesPanel table{
+  width: 100%;
+}
+#intervalChangesPanel th,
+#intervalChangesPanel td{
+  font-size: 12px;
+  padding: 4px;
+}
+
+/* Responsive: stack the middle split on narrower screens */
+@media (max-width: 1100px){
+  #pitchRow{
+    grid-template-columns: 420px minmax(260px, 1fr);
+  }
+  #snapshotsCol{ grid-column: 1 / -1; }
+  #midSplit{ grid-template-columns: 1fr; }
+}
 
   /* ---------- HALF PITCH (DEFENSIVE) ---------- */
   #pitch-container{
@@ -324,16 +357,22 @@ Jacob	CM	RM	ST	LM
   </div>
 
   <!-- MIDDLE: live minutes -->
-  <div id="minutesCol">
+<div id="minutesCol">
+  <div id="midSplit">
     <div id="liveTotalsPanel" class="panel"></div>
+
+    <!-- Move Interval Changes panel/table into here -->
+    <div id="intervalChangesPanel" class="panel">
+      <!-- put your existing Interval Changes content/table here -->
+    </div>
   </div>
+</div>
 
   <!-- RIGHT: live snapshots -->
   <div id="snapshotsCol">
     <div id="liveSnapshotsPanel" class="panel"></div>
   </div>
 </div>
-
 
 <div id="scheduleContainer" class="panel" style="display:none;"></div>
 <div id="errorBox" class="panel" style="display:none;border:2px solid #a40000;background:#fff0f0;"></div>
@@ -2758,6 +2797,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
