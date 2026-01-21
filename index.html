@@ -2275,7 +2275,28 @@ function renderLineupSnapshots(schedule){
   refreshScheduleViews();
   enableDragEditForCurrentPeriod();
 }
+function blockId20(seg){
+  return Math.floor((seg?.start || 0) / 20);
+}
 
+// Copy ONLY the changed slots forward until the end of the current 20-min block
+function propagateSlotsToEndOf20Block(startIdx, changedSlots){
+  if (!currentSchedule || !currentSchedule[startIdx]) return;
+  if (!Array.isArray(changedSlots) || changedSlots.length === 0) return;
+
+  const baseSeg = currentSchedule[startIdx];
+  const bid = blockId20(baseSeg);
+
+  for (let i = startIdx + 1; i < currentSchedule.length; i++){
+    const seg = currentSchedule[i];
+    if (blockId20(seg) !== bid) break; // stop at next 20-min block
+
+    for (const slot of changedSlots){
+      if (slot === "GK") continue;
+      seg.lineup[slot] = baseSeg.lineup[slot];
+    }
+  }
+}
 
   function refreshScheduleViews(){
     if (!currentSchedule) return;
@@ -2366,6 +2387,7 @@ function enableDragEditForCurrentPeriod(){
 }
 
 // Swap logic: drop onto another shirt swaps them (pitch<->pitch or pitch<->bench)
+// ALSO: any change you make "sticks" to the end of the current 20-min block
 function handleDropSwap(targetEl, droppedName){
   const seg = currentSchedule[selectedSegmentIndex];
   const lineup = seg.lineup;
@@ -2374,45 +2396,53 @@ function handleDropSwap(targetEl, droppedName){
   const targetArea = targetEl.dataset.area || "";
   const targetSlot = targetEl.dataset.slot || "";
 
-  // find where the dropped player currently is (pitch slot or bench)
-  const fromSlot = findPlayerSlot(lineup, droppedName); // null => bench
+  // Where is the dropped player currently? (slot string) or null => bench
+  const fromSlot = findPlayerSlot(lineup, droppedName);
   const targetPitchSlot = (targetArea === "pitch") ? targetSlot : null;
-  const targetIsOnPitch = !!findPlayerSlot(lineup, targetName);
 
-  // Case 1: drop pitch player onto pitch player -> swap slots
+  // Case 1: pitch -> pitch (swap slots)
   if (fromSlot && targetPitchSlot){
     if (fromSlot === targetPitchSlot) return;
+
+    // Don't allow swapping GK via this handler (optional safety)
+    if (fromSlot === "GK" || targetPitchSlot === "GK") return;
+
     const a = lineup[fromSlot];
     const b = lineup[targetPitchSlot];
     lineup[fromSlot] = b;
     lineup[targetPitchSlot] = a;
-    afterScheduleEdit();
+
+    // Tell afterScheduleEdit which slots changed so it can propagate within the 20-min block
+    afterScheduleEdit([fromSlot, targetPitchSlot]);
     return;
   }
 
-  // Case 2: drop bench player onto pitch player -> bench target, put dropped into target slot
+  // Case 2: bench -> pitch (replace the pitch player in that slot)
   if (!fromSlot && targetPitchSlot){
-    // can't put GK here
-    if (droppedName === lineup.GK) return;
+    if (targetPitchSlot === "GK") return;      // can't drop into GK slot
+    if (droppedName === lineup.GK) return;     // can't put GK into outfield slot
+
     lineup[targetPitchSlot] = droppedName;
-    afterScheduleEdit();
+
+    afterScheduleEdit([targetPitchSlot]);
     return;
   }
 
-  // Case 3: drop pitch player onto bench player -> bring bench player into pitch player's slot
+  // Case 3: pitch -> bench (replace the pitch player with the bench player you dropped onto)
+  // NOTE: this assumes targetName is the bench player you dropped onto
   if (fromSlot && targetArea === "bench" && targetName){
-    // do not allow anyone to replace GK via bench swap here
-    if (fromSlot === "GK") return;
-    // bench player must not be GK
-    if (targetName === lineup.GK) return;
+    if (fromSlot === "GK") return;             // don't move GK this way
+    if (targetName === lineup.GK) return;      // don't bring GK into outfield slot
 
     lineup[fromSlot] = targetName;
-    afterScheduleEdit();
+
+    afterScheduleEdit([fromSlot]);
     return;
   }
 
-  // bench->bench: no-op
+  // bench -> bench: no-op
 }
+
 
 function findPlayerSlot(lineup, name){
   for (const slot of slots){
@@ -2422,27 +2452,29 @@ function findPlayerSlot(lineup, name){
 }
 
 // After any edit: rerender pitch+bench, keep dragging alive, and (optionally) update table
-function afterScheduleEdit(){
-  // 1) Update glow pairs for the currently selected boundary
-  rebuildGlowMapForSelectedInterval();
+function afterScheduleEdit(changedSlots = []){
+  // Make edits "stick" to end of the current 20-min block (e.g. 20-30 also affects 30-40)
+  propagateSlotsToEndOf20Block(selectedSegmentIndex, changedSlots);
 
-  // 2) Re-render pitch/bench for the selected period
+  // Update glow (if you’re using it)
+  if (typeof rebuildGlowMapForSelectedInterval === "function") {
+    rebuildGlowMapForSelectedInterval();
+  }
+
+  // Recompute minutes from the whole schedule + update table + live panel
+  if (typeof fillMinutesFromSchedule === "function") fillMinutesFromSchedule(currentSchedule);
+  if (typeof renderTable === "function") renderTable();
+  if (typeof renderLiveTotalsPanel === "function") renderLiveTotalsPanel(); // only if you have it
+
+  // Re-render pitch for the currently selected segment
   const seg = currentSchedule?.[selectedSegmentIndex];
   if (seg) renderPitchFromLineup(seg.lineup);
 
-  // 3) Refresh UI blocks (changes table, snapshots, tabs)
+  // Refresh any schedule UI blocks/tabs
   if (typeof refreshScheduleViews === "function") refreshScheduleViews();
   if (typeof renderPeriodTabs === "function") renderPeriodTabs();
 
-  // 4) Feed edits back into minutes table (optional but you wanted feedback)
-  if (typeof fillMinutesFromSchedule === "function") fillMinutesFromSchedule(currentSchedule);
-  if (typeof renderTable === "function") renderTable();
-
-  // 4b) Update live minutes side panel
-  if (typeof renderLiveTotalsPanel === "function") renderLiveTotalsPanel();
-
-
-  // 5) Ensure drag never "locks"
+  // Ensure drag never "locks"
   if (typeof enableDragEditForCurrentPeriod === "function") enableDragEditForCurrentPeriod();
 }
 
@@ -2454,57 +2486,70 @@ function findSlotOfName(lineup, name){
 }
 
   function applyManualAssignment(){
-    const msg = document.getElementById("editMsg");
-    if (msg) { msg.textContent = ""; msg.style.color = ""; }
+  const msg = document.getElementById("editMsg");
+  if (msg) { msg.textContent = ""; msg.style.color = ""; }
 
-    if (!currentSchedule) { if (msg) msg.textContent = "No schedule yet."; return; }
-    const seg = currentSchedule[selectedSegmentIndex];
-    if (!seg) { if (msg) msg.textContent = "Bad interval."; return; }
+  if (!currentSchedule) { if (msg) msg.textContent = "No schedule yet."; return; }
+  const seg = currentSchedule[selectedSegmentIndex];
+  if (!seg) { if (msg) msg.textContent = "Bad interval."; return; }
 
-    const slot = document.getElementById("editSlot")?.value;
-    const name = document.getElementById("editPlayer")?.value;
+  const slot = document.getElementById("editSlot")?.value;
+  const name = document.getElementById("editPlayer")?.value;
 
-    if (!slot || !name) { if (msg) msg.textContent = "Pick a slot and player."; return; }
-    if (slot === "GK") { if (msg) msg.textContent = "GK is locked."; return; }
+  if (!slot || !name) { if (msg) msg.textContent = "Pick a slot and player."; return; }
+  if (slot === "GK") { if (msg) msg.textContent = "GK is locked."; return; }
+  if (name === seg.lineup.GK) { if (msg) msg.textContent = "GK cannot be moved into outfield."; return; }
 
-    const newLineup = { ...seg.lineup };
-    const prevNameInSlot = newLineup[slot];
+  const newLineup = { ...seg.lineup };
+  const prevNameInSlot = newLineup[slot];
 
-    let otherSlot = null;
-    for (const s of slots){
-      if (s === "GK") continue;
-      if (newLineup[s] === name) { otherSlot = s; break; }
-    }
-    newLineup[slot] = name;
-    if (otherSlot) newLineup[otherSlot] = prevNameInSlot;
-
-    const all = Object.values(newLineup);
-    if (new Set(all).size !== all.length){
-      if (msg) { msg.textContent = "Invalid: duplicate player on pitch."; msg.style.color = "#a40000"; }
-      return;
-    }
-    if (newLineup.GK !== seg.lineup.GK){
-      if (msg) { msg.textContent = "Invalid: GK must stay locked."; msg.style.color = "#a40000"; }
-      return;
-    }
-
-    seg.lineup = newLineup;
-
-    fillMinutesFromSchedule(currentSchedule);
-    renderPitchFromLineup(seg.lineup);
-    refreshScheduleViews();
-
-    const oop = isOutOfPosition(name, slot);
-    if (msg){
-      msg.textContent = oop
-        ? `Applied (out of position: ${name} at ${slot.startsWith("CM")?"CM":slot}).`
-        : "Applied.";
-      msg.style.color = oop ? "#a40000" : "#0a6a0a";
-    }
+  // If player is already on pitch somewhere else, swap them
+  let otherSlot = null;
+  for (const s of slots){
+    if (s === "GK") continue;
+    if (newLineup[s] === name) { otherSlot = s; break; }
   }
-  // ---- Drag editing helpers (needed by renderPitchFromLineup) ----
-scheduleEditActive = window.scheduleEditActive ?? false;
-draggedPlayerName = null;
+  newLineup[slot] = name;
+  if (otherSlot) newLineup[otherSlot] = prevNameInSlot;
+
+  // Validate: 9 unique + GK unchanged
+  const all = Object.values(newLineup);
+  if (new Set(all).size !== all.length){
+    if (msg) { msg.textContent = "Invalid: duplicate player on pitch."; msg.style.color = "#a40000"; }
+    return;
+  }
+  if (newLineup.GK !== seg.lineup.GK){
+    if (msg) { msg.textContent = "Invalid: GK must stay locked."; msg.style.color = "#a40000"; }
+    return;
+  }
+
+  // Apply
+  seg.lineup = newLineup;
+
+  // NEW: make the change "stick" to the end of this 20-min block
+  // (propagate forward until the next 20-min boundary)
+  if (typeof propagateEditToEndOf20Block === "function"){
+    propagateEditToEndOf20Block([slot, otherSlot].filter(Boolean));
+  }
+
+  // Recalc + redraw
+  fillMinutesFromSchedule(currentSchedule);
+  renderPitchFromLineup(seg.lineup);
+  refreshScheduleViews?.();
+
+  const oop = isOutOfPosition(name, slot);
+  if (msg){
+    msg.textContent = oop
+      ? `Applied (out of position: ${name} at ${slot.startsWith("CM")?"CM":slot}).`
+      : "Applied.";
+    msg.style.color = oop ? "#a40000" : "#0a6a0a";
+  }
+}
+
+// ---- Drag editing globals (safe init) ----
+window.scheduleEditActive = window.scheduleEditActive ?? false;
+window.draggedPlayerName = null;
+
 
 function clearDropTargets(){
   document.querySelectorAll(".drop-target").forEach(n => n.remove());
@@ -2686,6 +2731,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
