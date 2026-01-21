@@ -238,6 +238,26 @@
   line-height: 1.0 !important;
   margin-top: 1px;
 }
+ #pitchAndMinutes{
+  display:flex;
+  gap:16px;
+  align-items:flex-start;
+}
+
+#pitchCol{
+  flex: 0 0 auto;
+}
+
+#minutesCol{
+  flex: 1 1 320px;
+  min-width: 260px;
+  max-width: 420px;
+}
+
+#liveMinutesPanel{
+  position: sticky;
+  top: 12px;
+} 
 
 </style>
 </head>
@@ -267,31 +287,43 @@ Jacob	CM	RM	ST	LM
     <small>Tip: set GK by choosing GK in one of the 1st–4th dropdowns.</small>
   </div>
 
-  <h3>Minutes Table</h3>
-  <div id="tableContainer"></div>
+ <h3>Minutes Table</h3>
+<div id="tableContainer"></div>
 
-  <button onclick="generateLineup()">Generate Starting Lineup</button>
-  <button onclick="generateFullSchedule()">Generate Full Match Schedule</button>
+<button onclick="generateLineup()">Generate Starting Lineup</button>
+<button onclick="generateFullSchedule()">Generate Full Match Schedule</button>
 
-  <div id="editorContainer"></div>
-<div id="liveTotalsPanel" class="panel" style="max-width:600px;"></div>
+<div id="editorContainer"></div>
+
 <h3>Formation</h3>
-<div id="periodTabs" class="period-tabs" style="margin:10px 0;"></div>
-<div id="pitch-container">
-    <div id="pitch">
-      <div class="halfway"></div>
-      <div class="centre-circle"></div>
-      <div class="penalty-box"></div>
-      <div class="six-yard-box"></div>
-      <div class="penalty-spot"></div>
+
+<div id="pitchRow">
+  <!-- LEFT: tabs + pitch + bench -->
+  <div id="pitchCol">
+    <div id="periodTabs" class="period-tabs" style="margin:10px 0;"></div>
+
+    <div id="pitch-container">
+      <div id="pitch">
+        <div class="halfway"></div>
+        <div class="centre-circle"></div>
+        <div class="penalty-box"></div>
+        <div class="six-yard-box"></div>
+        <div class="penalty-spot"></div>
+      </div>
     </div>
+
+    <h3>Bench</h3>
+    <div id="bench"></div>
   </div>
 
-  <h3>Bench</h3>
-  <div id="bench"></div>
+  <!-- RIGHT: live minutes panel -->
+  <div id="minutesCol">
+    <div id="liveTotalsPanel" class="panel"></div>
+  </div>
+</div>
 
-  <div id="scheduleContainer" class="panel" style="display:none;"></div>
-  <div id="errorBox" class="panel" style="display:none;border:2px solid #a40000;background:#fff0f0;"></div>
+<div id="scheduleContainer" class="panel" style="display:none;"></div>
+<div id="errorBox" class="panel" style="display:none;border:2px solid #a40000;background:#fff0f0;"></div>
 
 <script>
 
@@ -2654,6 +2686,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
+
 
 
 
