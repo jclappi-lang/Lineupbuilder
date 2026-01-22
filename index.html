@@ -333,8 +333,6 @@ Jacob	CM	RM	ST	LM
 <button onclick="generateLineup()">Generate Starting Lineup</button>
 <button onclick="generateFullSchedule()">Generate Full Match Schedule</button>
 
-<div id="editorContainer"></div>
-
 <h3>Formation</h3>
 
 <div id="pitchRow">
@@ -374,7 +372,6 @@ Jacob	CM	RM	ST	LM
   </div>
 </div>
 
-<div id="scheduleContainer" class="panel" style="display:none;"></div>
 <div id="errorBox" class="panel" style="display:none;border:2px solid #a40000;background:#fff0f0;"></div>
 
 <script>
@@ -2776,6 +2773,407 @@ function generateFullSchedule_impl(){
 
 
   /* ======== PASTE THE ONE-PASTE BLOCK HERE (END) ======== */
+
+/* ===========================
+   PATCH: 3-col layout cleanup + remove bottom blocks + flipped snapshots + auto preferred allocation
+   =========================== */
+
+// --- helper: allocate preferred minutes (GK 80, rest evenly to reach 720) ---
+function autoAllocatePreferredOnLoad(){
+  if (!Array.isArray(players) || players.length === 0) return;
+
+  const totalTarget = 720;
+  const maxPerPlayer = 80;
+
+  // Need at least 9 players to reach 720 with max 80 each
+  if (players.length * maxPerPlayer < totalTarget){
+    // best-effort: give everyone 80, still cannot reach 720
+    players.forEach(p => p.preferred = 80);
+    return;
+  }
+
+  // Pick GK: first player with GK in prefs, else first player
+  let gkIdx = players.findIndex(p => (p.prefs || []).includes("GK"));
+  if (gkIdx < 0) gkIdx = 0;
+
+  // Work in ticks (10-min units)
+  const gkTicks = 8;
+  const totalTicks = 72;
+  let remainingTicks = totalTicks - gkTicks;
+
+  const nOthers = players.length - 1;
+  if (nOthers <= 0){
+    players[0].preferred = 80;
+    return;
+  }
+
+  // Base + remainder distribution
+  let base = Math.floor(remainingTicks / nOthers);
+  let rem = remainingTicks - base * nOthers;
+
+  // If base exceeds max (8), cap and adjust (rare if very small squad)
+  // We'll fill to max then distribute leftover is impossible; but this case won't happen due to earlier max check.
+  base = Math.min(base, 8);
+
+  const ticks = new Array(players.length).fill(0);
+  ticks[gkIdx] = gkTicks;
+
+  // Assign others in table order (top gets extra)
+  let oi = 0
+  for (let i=0; i<players.length; i++){
+    if (i === gkIdx) continue;
+    ticks[i] = base + (oi < rem ? 1 : 0);
+    ticks[i] = Math.max(0, Math.min(8, ticks[i]));
+    oi++;
+  }
+
+  // If rounding/clamping caused drift, fix by adding/removing ticks from top/bottom (excluding GK)
+  let sum = ticks.reduce((a,b)=>a+b,0);
+  let drift = totalTicks - sum;
+
+  const canInc = (i) => i !== gkIdx && ticks[i] < 8;
+  const canDec = (i) => i !== gkIdx && ticks[i] > 0;
+
+  while (drift > 0){
+    const idx = ticks.findIndex((_,i)=>canInc(i));
+    if (idx < 0) break;
+    ticks[idx] += 1;
+    drift -= 1;
+  }
+  while (drift < 0){
+    // take from bottom players first
+    let idx = -1;
+    for (let i=ticks.length-1; i>=0; i--){
+      if (canDec(i)) { idx = i; break; }
+    }
+    if (idx < 0) break;
+    ticks[idx] -= 1;
+    drift += 1;
+  }
+
+  // Apply to preferred minutes
+  players.forEach((p,i)=> p.preferred = ticks[i]*10);
+}
+
+// --- override loadPlayers: after paste, auto-allocate preferred minutes ---
+const _loadPlayers_orig = loadPlayers;
+loadPlayers = function loadPlayers(){
+  const raw = document.getElementById("playerPaste").value.trim();
+  if (!raw) return;
+
+  players = raw
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const cells = line.includes("\t") ? line.split("\t")
+                  : line.includes(",") ? line.split(",")
+                  : [line];
+
+      const name = (cells[0] || "").trim();
+      if (!name) return null;
+
+      const prefs = [1,2,3,4].map(i => normalizePos((cells[i] || "").trim()));
+
+      return {
+        name,
+        preferred: 0,
+        mins: initMins(),
+        prefs,
+        avoid: ""
+      };
+    })
+    .filter(Boolean);
+
+  autoAllocatePreferredOnLoad();
+  renderTable();
+};
+
+// --- interval changes renderer into middle column ---
+function renderIntervalChangesPanel(){
+  const box = document.getElementById("intervalChangesPanel");
+  if (!box) return;
+
+  if (!currentSchedule || !currentSchedule.length){
+    box.innerHTML = "";
+    return;
+  }
+
+  const changes = buildChangeRows(currentSchedule);
+
+  box.innerHTML = `
+    <h4 style="margin:0 0 6px 0;">Interval Changes</h4>
+    <small style="opacity:.75;display:block;margin-bottom:8px;">
+      Shows substitutions between intervals.
+    </small>
+    <table style="margin:0;">
+      <tr><th>Time</th><th>Subbed Off</th><th>Subbed On</th></tr>
+      ${changes.map(r => `
+        <tr>
+          <td><b>${r.time}'</b></td>
+          <td>${escapeHtml(r.off.join(", ") || "-")}</td>
+          <td>${escapeHtml(r.on.join(", ") || "-")}</td>
+        </tr>
+      `).join("")}
+    </table>
+  `;
+}
+
+// --- flipped snapshots: times across top, names down side ---
+function renderLineupSnapshots(schedule){
+  if (!schedule || !schedule.length) return "";
+
+  const headerSlots = ["GK","LB","CB","RB","LM","CM_L","CM_R","RM","ST"];
+  const slotLabel = (s) => s.startsWith("CM") ? "CM" : s;
+
+  // Include kickoff + any segment where lineup changed vs previous
+  const rows = [schedule[0]];
+  for (let i=1; i<schedule.length; i++){
+    const prev = schedule[i-1].lineup;
+    const curr = schedule[i].lineup;
+    let changed = false;
+    for (const slot of headerSlots){
+      if ((prev[slot]||"") !== (curr[slot]||"")) { changed = true; break; }
+    }
+    if (changed) rows.push(schedule[i]);
+  }
+
+  const times = rows.map(r => r.start);
+
+  // Build a lookup: timeIndex -> (player -> slot/bench)
+  const atTime = rows.map(seg => {
+    const lu = seg.lineup || {};
+    const p2slot = {};
+    for (const s of headerSlots){
+      const n = lu[s];
+      if (n) p2slot[n] = slotLabel(s);
+    }
+    return p2slot;
+  });
+
+  const names = players.map(p => p.name);
+
+  const body = names.map(n => {
+    const cells = atTime.map((_,ti)=>{
+      const val = atTime.length ? (atTime[ti][n] || "BENCH") : "BENCH";
+      return `<td>${escapeHtml(val)}</td>`;
+    }).join("");
+    return `<tr><td style="text-align:left;"><b>${escapeHtml(n)}</b></td>${cells}</tr>`;
+  }).join("");
+
+  return `
+    <h4 style="margin:0 0 6px 0;">Lineup Snapshots</h4>
+    <small style="opacity:.75;display:block;margin-bottom:8px;">
+      Times across the top; each cell shows the slot (or BENCH) at that time.
+    </small>
+    <table style="margin:0;">
+      <tr>
+        <th style="text-align:left;">Player</th>
+        ${times.map(t=>`<th>${t}'</th>`).join("")}
+      </tr>
+      ${body}
+    </table>
+  `;
+}
+
+// Ensure live snapshots uses the flipped renderer
+renderLiveSnapshotsPanel = function renderLiveSnapshotsPanel(){
+  const box = document.getElementById("liveSnapshotsPanel");
+  if (!box) return;
+
+  if (!currentSchedule || !currentSchedule.length){
+    box.innerHTML = "";
+    return;
+  }
+  box.innerHTML = renderLineupSnapshots(currentSchedule);
+};
+
+// --- updateTotals: make prefTotal react like Live Diff (vs 720) ---
+const _updateTotals_orig = updateTotals;
+updateTotals = function updateTotals(){
+  let pref = 0, grand = 0;
+  const col = {};
+  positions.forEach(p => col[p] = 0);
+
+  players.forEach((p,i) => {
+    let sum = 0;
+    positions.forEach(pos => {
+      const v = p.mins[pos] || 0;
+      sum += v;
+      col[pos] += v;
+    });
+
+    const row = document.getElementById("row"+i);
+    if (row){
+      row.innerText = sum;
+
+      row.className = "";
+      if (sum === 0) row.className = "";
+      else if (sum > (p.preferred||0) + 10) row.className = "red";
+      else if (sum > (p.preferred||0)) row.className = "orange";
+      else row.className = "green";
+    }
+
+    pref += (p.preferred || 0);
+    grand += sum;
+  });
+
+  positions.forEach(p => {
+    const td = document.getElementById("col"+p);
+    if (!td) return;
+    td.innerText = col[p];
+    const d = Math.abs(col[p] - expected[p]);
+    td.className = (d === 0) ? "green" : (d <= 20) ? "orange" : "red";
+  });
+
+  const prefTd = document.getElementById("prefTotal");
+  if (prefTd){
+    prefTd.innerText = pref;
+    const diff = pref - 720;
+    const cls = (pref===0) ? "" : (diff===0 ? "green" : (Math.abs(diff)<=10 ? "orange" : "red"));
+    prefTd.className = cls;
+  }
+
+  const gt = document.getElementById("grandTotal");
+  if (gt){
+    gt.innerText = grand;
+    const targetGrand = 720;
+    const diff = Math.abs(grand - targetGrand);
+    gt.className = (diff === 0) ? "green" : (diff <= 20) ? "orange" : "red";
+  }
+};
+
+// --- override generateFullSchedule: no bottom rendering, only panels ---
+generateFullSchedule = function generateFullSchedule(){
+  try {
+    generateFullSchedule_impl();
+  } catch (e) {
+    console.error(e);
+    const box = document.getElementById("errorBox");
+    if (box){
+      box.style.display = "block";
+      box.innerHTML =
+        `<h4 style="margin:0 0 6px 0;color:#a40000">Generate Full Match Schedule crashed</h4>
+         <pre style="margin:0;text-align:left;white-space:pre-wrap">${escapeHtml(e?.stack || e?.message || String(e))}</pre>`;
+    } else {
+      alert("Generate Full Match Schedule crashed: " + (e?.message || e));
+    }
+  }
+};
+
+// Replace impl tail so it doesn't write to scheduleContainer/editor/snapshots blocks
+const _generateFullSchedule_impl_orig = generateFullSchedule_impl;
+generateFullSchedule_impl = function generateFullSchedule_impl(){
+  const demand = {};
+  players.forEach(p => {
+    demand[p.name] = {};
+    positions.forEach(pos => {
+      demand[p.name][pos] = Math.round((p.mins[pos] || 0) / 10);
+    });
+  });
+
+  const gkPlayer = chooseLockedGK(demand);
+  const gkName = gkPlayer?.name || null;
+
+  const errors = [];
+  const warnings = [];
+
+  if (!gkName) {
+    errors.push("No goalkeeper found (no player has GK minutes > 0).");
+  } else if ((demand[gkName]["GK"] || 0) !== 8) {
+    errors.push(`Goalkeeper is locked, but ${gkName} has ${(demand[gkName]["GK"]||0)*10} GK minutes (needs 80). Fix GK to exactly 80.`);
+  }
+
+  if (errors.length){
+    // show in interval changes panel
+    const box = document.getElementById("intervalChangesPanel");
+    if (box){
+      box.innerHTML =
+        `<h4 style="margin:0 0 6px 0;">Interval Changes</h4>
+         <div class="warn">Errors (fix these in the minutes table):<ul>` +
+        errors.map(e => `<li>${escapeHtml(e)}</li>`).join("") +
+        `</ul></div>`;
+    }
+    return;
+  }
+
+  const segments20 = [
+    { start:0, end:20, tickLen:2 },
+    { start:20, end:40, tickLen:2 },
+    { start:40, end:60, tickLen:2 },
+    { start:60, end:80, tickLen:2 },
+  ];
+  const segments10 = Array.from({length:8}, (_,i)=>({ start:i*10, end:(i+1)*10, tickLen:1 }));
+
+  let solved = solveFullMatchFromDemand(segments20, demand, gkName);
+  if (!solved.ok){
+    warnings.push("Had to use 10-minute intervals to satisfy minute allocations.");
+    solved = solveFullMatchFromDemand(segments10, demand, gkName);
+  }
+
+  if (!solved.ok){
+    const box = document.getElementById("intervalChangesPanel");
+    if (box){
+      box.innerHTML =
+        `<h4 style="margin:0 0 6px 0;">Interval Changes</h4>
+         <div class="warn">Errors (fix these in the minutes table):<ul>
+           <li>${escapeHtml(solved.reason)}</li>
+         </ul></div>`;
+    }
+    return;
+  }
+
+  currentSchedule = solved.schedule.map(s => ({
+    start: s.start, end: s.end, tickLen: s.tickLen,
+    lineup: { ...s.lineup }
+  }));
+  selectedSegmentIndex = 0;
+  rebuildGlowMapForSelectedInterval();
+  scheduleMode = "minutes";
+  scheduleEditActive = true;
+
+  renderPeriodTabs();
+  renderIntervalChangesPanel();
+  renderLiveTotalsPanel();
+  renderLiveSnapshotsPanel();
+
+  // Show first period
+  if (currentSchedule.length) renderPitchFromLineup(currentSchedule[0].lineup);
+  enableDragEditForCurrentPeriod();
+};
+
+// Make afterScheduleEdit also refresh interval changes panel
+const _afterScheduleEdit_orig = afterScheduleEdit;
+afterScheduleEdit = function afterScheduleEdit(changedSlots = []){
+  propagateSlotsToEndOf20Block(selectedSegmentIndex, changedSlots);
+
+  if (typeof rebuildGlowMapForSelectedInterval === "function") rebuildGlowMapForSelectedInterval();
+  if (typeof fillMinutesFromSchedule === "function") fillMinutesFromSchedule(currentSchedule);
+
+  if (typeof renderTable === "function") renderTable();
+  if (typeof renderLiveTotalsPanel === "function") renderLiveTotalsPanel();
+  if (typeof renderIntervalChangesPanel === "function") renderIntervalChangesPanel();
+  if (typeof renderLiveSnapshotsPanel === "function") renderLiveSnapshotsPanel();
+
+  const seg = currentSchedule?.[selectedSegmentIndex];
+  if (seg) renderPitchFromLineup(seg.lineup);
+
+  if (typeof renderPeriodTabs === "function") renderPeriodTabs();
+  if (typeof enableDragEditForCurrentPeriod === "function") enableDragEditForCurrentPeriod();
+};
+
+// Ensure interval changes panel updates when switching tabs
+const _selectSegment_orig = selectSegment;
+selectSegment = function selectSegment(i){
+  selectedSegmentIndex = i;
+  rebuildGlowMapForSelectedInterval();
+  const seg = currentSchedule?.[selectedSegmentIndex];
+  if (seg) renderPitchFromLineup(seg.lineup);
+  renderIntervalChangesPanel();
+  renderLiveSnapshotsPanel();
+  enableDragEditForCurrentPeriod();
+};
+
 window.addEventListener("DOMContentLoaded", () => {
   try {
     renderTable();
