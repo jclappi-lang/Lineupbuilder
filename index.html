@@ -64,7 +64,21 @@
     color:#fff;
   }
 
-  /* Preferred minutes input + buttons */
+  
+
+  /* Pitch tool buttons */
+  .pitch-tools{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .pitch-tools .tool-btn{
+    padding:6px 10px;
+    border:1px solid #333;
+    background:#fff;
+    cursor:pointer;
+    border-radius:6px;
+    font-weight:700;
+    font-size:12px;
+  }
+  .pitch-tools .tool-btn:hover{ background:#f0f0f0; }
+/* Preferred minutes input + buttons */
   .pref-wrap{
     display:flex;
     flex-direction:column;
@@ -298,6 +312,39 @@
     line-height: 1.0 !important;
     margin-top: 1px;
   }
+
+  /* ---------- PLACEHOLDERS (for free-form builder dragging) ---------- */
+  .pitch-placeholder, .bench-placeholder{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-sizing:border-box;
+    border:2px dashed rgba(255,255,255,0.75);
+    border-radius:14px;
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.9);
+    font-weight: 800;
+    font-size: 12px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    user-select:none;
+  }
+  .pitch-placeholder{
+    position:absolute;
+    width:86px;
+    height:96px;
+    pointer-events:auto;
+  }
+  .bench-placeholder{
+    width:86px;
+    height:96px;
+    pointer-events:auto;
+  }
+  .placeholder.dragover{
+    outline: 3px solid #ffd580;
+    outline-offset: -6px;
+    background: rgba(255,213,128,0.20);
+  }
+
 </style>
 
 </head>
@@ -338,7 +385,11 @@ Jacob	CM	RM	ST	LM
 <div id="pitchRow">
   <!-- LEFT: tabs + pitch + bench -->
   <div id="pitchCol">
-    <div id="periodTabs" class="period-tabs" style="margin:10px 0;"></div>
+    <div class="pitch-tools" style="margin:10px 0;">
+  <button type="button" class="tool-btn" onclick="clearPitch()">Clear pitch</button>
+  <button type="button" class="tool-btn" onclick="addTenMinuteInterval()">Add 10-min interval</button>
+  <div id="periodTabs" class="period-tabs"></div>
+</div>
 
     <div id="pitch-container">
       <div id="pitch">
@@ -563,6 +614,88 @@ function debugAutoFillSnapshot(){
       .filter(Boolean);
 
     renderTable();
+    initBuilderSchedule20();
+    initBuilderSchedule20();
+
+    // Auto-allocate preferred minutes: GK=80, spread rest to total 720
+    autoAllocatePreferredAfterPaste();
+    renderTable();
+
+    // Show everyone on the bench immediately (free-form builder with 20-min tabs)
+    initBuilderSchedule20();
+  }
+
+
+  // ---------------- Auto allocate preferred minutes on paste ----------------
+  function resetBuilderLineupToEmpty(){
+    window.builderLineup = Object.fromEntries(slots.map(s=>[s,""]));
+  }
+
+  // Create a default 20-min interval "builder schedule" (no auto 10-min segments).
+  function initBuilderSchedule20(){
+    window.builderSchedule = [
+      { start:0,  end:20, tickLen:2, lineup: Object.fromEntries(slots.map(s=>[s,""])) },
+      { start:20, end:40, tickLen:2, lineup: Object.fromEntries(slots.map(s=>[s,""])) },
+      { start:40, end:60, tickLen:2, lineup: Object.fromEntries(slots.map(s=>[s,""])) },
+      { start:60, end:80, tickLen:2, lineup: Object.fromEntries(slots.map(s=>[s,""])) },
+    ];
+    selectedSegmentIndex = 0;
+    window.builderLineup = window.builderSchedule[0].lineup;
+
+    // Clear side panels until a real schedule is generated
+    const live = document.getElementById("liveTotalsPanel");
+    if (live) live.innerHTML = "";
+    const changes = document.getElementById("intervalChangesPanel");
+    if (changes) changes.innerHTML = "<h4>Interval Changes</h4><small style=\"opacity:.75\">Generate a full schedule to see substitutions. In builder mode you can manually split intervals and place players.</small>";
+    const snaps = document.getElementById("liveSnapshotsPanel");
+    if (snaps) snaps.innerHTML = "";
+
+    renderPeriodTabs?.();
+    renderPitchFromLineup(window.builderLineup);
+    enableDragEditForCurrentPeriod?.();
+  }
+
+  function getActiveSchedule(){
+    return (currentSchedule && currentSchedule.length) ? currentSchedule : (window.builderSchedule || null);
+  }
+function autoAllocatePreferredAfterPaste(){
+    if (!players || players.length === 0) return;
+
+    // Pick GK as the first player who has GK in their prefs (1st–4th); fallback to first player
+    let gkIdx = players.findIndex(p => (p.prefs || []).includes("GK"));
+    if (gkIdx < 0) gkIdx = 0;
+
+    const totalTarget = 720;
+    const gkMins = 80;
+
+    // Set GK preferred
+    players.forEach((p,i)=>{ p.preferred = 0; });
+    players[gkIdx].preferred = gkMins;
+
+    const others = players.length - 1;
+    const remaining = Math.max(0, totalTarget - gkMins);
+
+    if (others <= 0) return;
+
+    // Work in 10-min ticks
+    const totalTicks = Math.round(remaining / 10);
+    const base = Math.floor(totalTicks / others);
+    let rem = totalTicks - base * others;
+
+    // Distribute: extra ticks to top players (excluding GK); if negative (shouldn't), remove from bottom
+    const otherIdxs = players.map((_,i)=>i).filter(i=>i!==gkIdx);
+
+    // base allocation
+    otherIdxs.forEach(i => players[i].preferred = base * 10);
+
+    // remainder allocation (+10) to top players first
+    for (let k=0; k<otherIdxs.length && rem>0; k++){
+      players[otherIdxs[k]].preferred += 10;
+      rem--;
+    }
+
+    // Clamp to [0,80] just in case
+    players.forEach(p => p.preferred = round10(p.preferred));
   }
 
   // ---------------- Pref dropdown helpers ----------------
@@ -719,7 +852,12 @@ function debugAutoFillSnapshot(){
       td.className = (d === 0) ? "green" : (d <= 20) ? "orange" : "red";
     });
 
-    document.getElementById("prefTotal").innerText = pref;
+    const prefTd = document.getElementById("prefTotal");
+    if (prefTd){
+      prefTd.innerText = pref;
+      const diffPref = pref - 720;
+      prefTd.className = (diffPref===0) ? "green" : (Math.abs(diffPref)<=10 ? "orange" : "red");
+    }
 
     const gt = document.getElementById("grandTotal");
     gt.innerText = grand;
@@ -1804,63 +1942,86 @@ recurse(0, null, null, false, 0, initBench);
 }
 
  function renderPitchFromLineup(lineup){
-  document.querySelectorAll(".shirt-wrap").forEach(n => n.remove());
+  document.querySelectorAll(".shirt-wrap, .pitch-placeholder").forEach(n => n.remove());
   document.getElementById("bench").innerHTML = "";
 
-  const liveMins = currentSchedule ? computeMinutesFromSchedule(currentSchedule) : {};
+  lineup = lineup || {};
+  // If we have a schedule, show live mins; otherwise show 0s (or preferred later if you want)
+  const liveMins = (currentSchedule && currentSchedule.length) ? computeMinutesFromSchedule(currentSchedule) : {};
 
-  // --- Pitch shirts ---
+  // --- Pitch: render either a shirt OR a placeholder for every slot ---
   slots.forEach(slot => {
-    const name = lineup[slot];
-    if (!name) return;
+    const name = (lineup[slot] || "").trim();
 
-    const isGK = slot === "GK";
-    const el = makeShirtEl({ name }, isGK);
+    if (name){
+      const isGK = slot === "GK";
+      const el = makeShirtEl({ name }, isGK);
 
-    // Label: name on line 1, minutes number on line 2
-    const nameEl = el.querySelector(".shirt-name");
-    if (nameEl) {
-      nameEl.innerHTML =
-        `<div class="nm">${escapeHtml(name)}</div>` +
-        `<div class="min">${(liveMins[name] || 0)}</div>`;
+      // label: name + live mins
+      const nameEl = el.querySelector(".shirt-name");
+      if (nameEl){
+        nameEl.innerHTML =
+          `<div class="nm">${escapeHtml(name)}</div>` +
+          `<div class="min">${(liveMins[name] || 0)}</div>`;
+      }
+
+      // glow pairing (if available)
+      const g = glowMap?.[name];
+      el.classList.toggle("glow", !!g);
+      if (g) el.style.setProperty("--glow", g);
+      else el.style.removeProperty("--glow");
+
+      // OOP indicator
+      if (typeof isOutOfPosition === "function"){
+        const oop = isOutOfPosition(name, slot);
+        el.classList.toggle("oop", !!oop);
+      }
+
+      el.dataset.kind = "shirt";
+      el.dataset.playerName = name;
+      el.dataset.area = "pitch";
+      el.dataset.slot = slot;
+
+      el.style.left = coords[slot].x + "px";
+      el.style.top  = coords[slot].y + "px";
+      document.getElementById("pitch-container").appendChild(el);
+    } else {
+      const ph = document.createElement("div");
+      ph.className = "pitch-placeholder placeholder";
+      ph.innerText = slot; // shows the slot label as a guide
+      ph.dataset.kind = "pitchSlot";
+      ph.dataset.area = "pitch";
+      ph.dataset.slot = slot;
+
+      ph.style.left = coords[slot].x + "px";
+      ph.style.top  = coords[slot].y + "px";
+      document.getElementById("pitch-container").appendChild(ph);
     }
-
-    // Glow (paired subs) using CSS variable --glow
-    const g = glowMap[name];
-    el.classList.toggle("glow", !!g);
-    if (g) el.style.setProperty("--glow", g);
-    else el.style.removeProperty("--glow");
-
-    // dataset tags so drag/drop can identify where this shirt came from
-    el.dataset.playerName = name;
-    el.dataset.area = "pitch";
-    el.dataset.slot = slot;
-
-    el.style.left = coords[slot].x + "px";
-    el.style.top  = coords[slot].y + "px";
-    document.getElementById("pitch-container").appendChild(el);
   });
 
-  // --- Bench shirts ---
-  const onPitch = new Set(Object.values(lineup));
-  players.filter(p => !onPitch.has(p.name)).forEach(p => {
+  // --- Bench: render ALL players not currently on pitch ---
+  const onPitch = new Set(Object.values(lineup).filter(Boolean));
+  const benchList = players.filter(p => !onPitch.has(p.name));
+
+  benchList.forEach(p => {
     const wrap = document.createElement("div");
     wrap.className = "bench-wrap";
 
     const el = makeShirtEl({ name: p.name }, false);
 
     const nameEl = el.querySelector(".shirt-name");
-    if (nameEl) {
+    if (nameEl){
       nameEl.innerHTML =
         `<div class="nm">${escapeHtml(p.name)}</div>` +
         `<div class="min">${(liveMins[p.name] || 0)}</div>`;
     }
 
-    const g = glowMap[p.name];
+    const g = glowMap?.[p.name];
     el.classList.toggle("glow", !!g);
     if (g) el.style.setProperty("--glow", g);
     else el.style.removeProperty("--glow");
 
+    el.dataset.kind = "shirt";
     el.dataset.playerName = p.name;
     el.dataset.area = "bench";
     el.dataset.slot = "BENCH";
@@ -1873,8 +2034,27 @@ recurse(0, null, null, false, 0, initBench);
     document.getElementById("bench").appendChild(wrap);
   });
 
-  // If schedule editing is active, re-enable drag/drop after re-render
-  if (scheduleEditActive) enableDragEditForCurrentPeriod();
+  // --- Bench placeholders: allow dropping pitch players off without needing a target shirt ---
+  const benchSlots = Math.max(12, players.length); // enough spaces to park everyone
+  const phCount = Math.max(0, benchSlots - benchList.length);
+
+  for (let i=0; i<phCount; i++){
+    const wrap = document.createElement("div");
+    wrap.className = "bench-wrap";
+
+    const ph = document.createElement("div");
+    ph.className = "bench-placeholder placeholder";
+    ph.innerText = "BENCH";
+    ph.dataset.kind = "benchSlot";
+    ph.dataset.area = "bench";
+    ph.dataset.slot = "BENCH_SLOT_" + i;
+
+    wrap.appendChild(ph);
+    document.getElementById("bench").appendChild(wrap);
+  }
+
+  // Always re-bind drag/drop after any render (so it never "locks")
+  enableDragEditForCurrentPeriod();
 }
 
   // ---------------- HELPERS ----------------
@@ -1982,6 +2162,8 @@ function computeMinutesFromSchedule(schedule){
     // every player on pitch (including GK) gets seg minutes
     const on = new Set(Object.values(seg.lineup || {}));
     for (const name of on){
+      if (!name) continue;
+      if (typeof mins[name] === "undefined") continue;
       mins[name] = (mins[name] || 0) + (seg.tickLen * 10);
     }
   }
@@ -2027,6 +2209,32 @@ function renderLiveTotalsPanel(){
     </table>
   `;
 }
+function renderIntervalChangesPanel(){
+  const box = document.getElementById("intervalChangesPanel");
+  if (!box) return;
+
+  if (!currentSchedule || !currentSchedule.length){
+    box.innerHTML = `<h4 style="margin:0 0 6px 0;">Interval Changes</h4><small style="opacity:.75">Generate a schedule to see changes.</small>`;
+    return;
+  }
+
+  const changes = buildChangeRows(currentSchedule);
+
+  box.innerHTML = `
+    <h4 style="margin:0 0 6px 0;">Interval Changes</h4>
+    <table style="margin:0;">
+      <tr><th>Time</th><th>Subbed Off</th><th>Subbed On</th></tr>
+      ${changes.map(r => `
+        <tr>
+          <td><b>${r.time}'</b></td>
+          <td>${escapeHtml(r.off.join(", ") || "-")}</td>
+          <td>${escapeHtml(r.on.join(", ") || "-")}</td>
+        </tr>
+      `).join("")}
+    </table>
+  `;
+}
+
 function renderLiveSnapshotsPanel(){
   const box = document.getElementById("liveSnapshotsPanel");
   if (!box) return;
@@ -2098,42 +2306,61 @@ function renderLineupSnapshots(schedule){
   const headerSlots = ["GK","LB","CB","RB","LM","CM_L","CM_R","RM","ST"];
   const slotLabel = (s) => s.startsWith("CM") ? "CM" : s;
 
-  // Show kickoff + any boundary where ANY slot changed (including GK, though it shouldn't)
-  const rows = [];
-  rows.push(schedule[0]);
-
+  // Use kickoff + any boundary where ANY slot changed
+  const cols = [];
+  cols.push(schedule[0]);
   for (let i=1; i<schedule.length; i++){
-    const prev = schedule[i-1].lineup;
-    const curr = schedule[i].lineup;
-
+    const prev = schedule[i-1].lineup || {};
+    const curr = schedule[i].lineup || {};
     let changed = false;
     for (const slot of headerSlots){
       if ((prev[slot] || "") !== (curr[slot] || "")) { changed = true; break; }
     }
-    if (changed) rows.push(schedule[i]);
+    if (changed) cols.push(schedule[i]);
   }
 
-  const htmlRows = rows.map(seg => {
-    const lu = seg.lineup;
+  // Map time -> lineup, and build a stable list of player names
+  const times = cols.map(s => s.start);
+  const timeLineups = cols.map(s => (s.lineup || {}));
+  const names = (players || []).map(p=>p.name).filter(Boolean);
+
+  // Build quick lookup: for each column, map player->slot (or BENCH)
+  const maps = timeLineups.map(lu => {
+    const m = {};
+    for (const slot of headerSlots){
+      const n = lu[slot];
+      if (n) m[n] = slotLabel(slot);
+    }
+    return m;
+  });
+
+  const bodyRows = names.map(n => {
+    const cells = maps.map(mp => (mp[n] || "BENCH"));
     return `
       <tr>
-        <td><b>${seg.start}'</b></td>
-        ${headerSlots.map(slot => `<td>${escapeHtml(lu[slot] || "-")}</td>`).join("")}
+        <td style="text-align:left;white-space:nowrap;"><b>${escapeHtml(n)}</b></td>
+        ${cells.map(v => `<td>${escapeHtml(v)}</td>`).join("")}
       </tr>
     `;
   }).join("");
 
   return `
-    <h4>Lineup Snapshots (only at changes)</h4>
-    <table>
-      <tr>
-        <th>Time</th>
-        ${headerSlots.map(s => `<th>${slotLabel(s)}</th>`).join("")}
-      </tr>
-      ${htmlRows}
-    </table>
+    <h4 style="margin:0 0 6px 0;">Lineup Snapshots</h4>
+    <small style="opacity:.75;display:block;margin-bottom:8px;">
+      Times across the top; each cell shows the player’s slot, or BENCH.
+    </small>
+    <div style="overflow:auto;max-height:70vh;">
+      <table style="margin:0;">
+        <tr>
+          <th style="text-align:left;position:sticky;left:0;background:#eee;z-index:2;">Player</th>
+          ${times.map(t => `<th>${t}'</th>`).join("")}
+        </tr>
+        ${bodyRows}
+      </table>
+    </div>
   `;
 }
+
 
   function fitTextToBox(el, maxW, maxH, startSize=13, minSize=9) {
     let size = startSize;
@@ -2191,7 +2418,10 @@ function renderLineupSnapshots(schedule){
     document.head.appendChild(style);
   })();
 
-  let currentSchedule = null;
+  
+  // Free-form builder lineup (used when no schedule exists yet)
+  window.builderLineup = window.builderLineup || Object.fromEntries(slots.map(s=>[s, ""]));
+let currentSchedule = null;
   let selectedSegmentIndex = 0;
   let scheduleMode = "minutes";
   let glowMap = {}; // name -> color string (e.g. "#00aaff")
@@ -2314,27 +2544,97 @@ function renderLineupSnapshots(schedule){
   const wrap = document.getElementById("periodTabs");
   if (!wrap) return;
 
-  // Only show tabs when we have a schedule
-  if (!currentSchedule || !currentSchedule.length){
+  const sch = getActiveSchedule();
+  if (!sch || !sch.length){
     wrap.innerHTML = "";
     return;
   }
 
-  wrap.innerHTML = currentSchedule.map((s,i)=>{
+  wrap.innerHTML = sch.map((s,i)=>{
     const label = `${s.start}'–${s.end}'`;
     const active = (i === selectedSegmentIndex) ? "active" : "";
     return `<button type="button" class="${active}" onclick="selectSegment(${i})">${label}</button>`;
   }).join("");
 }
 
+function clearPitch(){
+  const sch = getActiveSchedule();
+  if (!sch || !sch[selectedSegmentIndex]) {
+    // fallback: just clear builder lineup
+    resetBuilderLineupToEmpty();
+    renderPitchFromLineup(window.builderLineup);
+    enableDragEditForCurrentPeriod?.();
+    return;
+  }
+
+  const seg = sch[selectedSegmentIndex];
+
+  // Clear every slot (including GK) to allow free-form rebuilding
+  for (const s of slots) seg.lineup[s] = "";
+
+  if (sch === currentSchedule){
+    // propagate within the 20-min block for schedule editing
+    afterScheduleEdit(slots.filter(s=>s!=="GK"));
+  } else {
+    window.builderLineup = seg.lineup;
+    renderPitchFromLineup(window.builderLineup);
+    enableDragEditForCurrentPeriod?.();
+  }
+}
+
+function addTenMinuteInterval(){
+  const sch = getActiveSchedule();
+  if (!sch || !sch[selectedSegmentIndex]) return;
+
+  const seg = sch[selectedSegmentIndex];
+  const len = (seg.end - seg.start);
+
+  if (!(len === 20 && seg.tickLen === 2)){
+    alert("Select a 20-minute interval to split into two 10-minute intervals.");
+    return;
+  }
+
+  const mid = seg.start + 10;
+  const a = { start: seg.start, end: mid, tickLen: 1, lineup: { ...seg.lineup } };
+  const b = { start: mid, end: seg.end, tickLen: 1, lineup: { ...seg.lineup } };
+
+  sch.splice(selectedSegmentIndex, 1, a, b);
+
+  // Re-link builderLineup if we're in builder mode
+  if (!(currentSchedule && currentSchedule.length)){
+    window.builderSchedule = sch;
+    window.builderLineup = sch[selectedSegmentIndex].lineup;
+  }
+
+  renderPeriodTabs?.();
+  selectSegment?.(selectedSegmentIndex);
+}
+
+
   function selectSegment(i){
+  const sch = getActiveSchedule();
+  if (!sch || !sch[i]) return;
+
   selectedSegmentIndex = i;
-  rebuildGlowMapForSelectedInterval();
-  const seg = currentSchedule?.[selectedSegmentIndex];
-  if (seg) renderPitchFromLineup(seg.lineup);
-  refreshScheduleViews();
-  renderLiveSnapshotsPanel();
-  enableDragEditForCurrentPeriod();
+
+  // In builder mode, keep builderLineup pointing at the selected interval's lineup
+  if (!(currentSchedule && currentSchedule.length)){
+    window.builderSchedule = sch;
+    window.builderLineup = sch[i].lineup;
+    glowMap = {};
+  } else {
+    rebuildGlowMapForSelectedInterval();
+  }
+
+  const seg = sch[i];
+  renderPitchFromLineup(seg.lineup);
+
+  // Update side panels (only meaningful when a real schedule exists)
+  if (typeof renderLiveTotalsPanel === "function") renderLiveTotalsPanel();
+  if (typeof renderLiveSnapshotsPanel === "function") renderLiveSnapshotsPanel();
+  if (typeof renderIntervalChangesPanel === "function") renderIntervalChangesPanel();
+
+  enableDragEditForCurrentPeriod?.();
 }
 function blockId20(seg){
   return Math.floor((seg?.start || 0) / 20);
@@ -2409,42 +2709,106 @@ function propagateSlotsToEndOf20Block(startIdx, changedSlots){
   }
 }
 function enableDragEditForCurrentPeriod(){
-  if (!scheduleEditActive) return;
-  if (!currentSchedule || !currentSchedule[selectedSegmentIndex]) return;
+  // Works in BOTH modes:
+  // - schedule mode: edits currentSchedule[selectedSegmentIndex].lineup
+  // - free builder mode: edits builderLineup
+  const sch = getActiveSchedule();
+  const lineup = (sch && sch[selectedSegmentIndex]) ? sch[selectedSegmentIndex].lineup : (window.builderLineup || null);
 
-  // IMPORTANT: always re-bind after every render so it never "locks"
-  const seg = currentSchedule[selectedSegmentIndex];
+  if (!lineup) return;
 
-  const allShirts = document.querySelectorAll("#pitch-container .shirt-wrap, #bench .shirt-wrap");
+  const targets = document.querySelectorAll(
+    "#pitch-container .shirt-wrap, #bench .shirt-wrap, #pitch-container .pitch-placeholder, #bench .bench-placeholder"
+  );
 
-  allShirts.forEach(el => {
+  targets.forEach(el => {
+    // Shirts AND placeholders should accept drops
     el.classList.add("editable");
-    el.setAttribute("draggable", "true");
+    el.setAttribute("draggable", el.dataset.kind === "shirt" ? "true" : "false");
 
-    const name = (el.dataset.playerName || el.querySelector(".shirt-name")?.innerText || "").trim();
-    el.dataset.playerName = name;
+    // drag source: shirts only
+    if (el.dataset.kind === "shirt"){
+      const name = (el.dataset.playerName || el.querySelector(".nm")?.innerText || el.querySelector(".shirt-name")?.innerText || "").trim();
+      el.dataset.playerName = name;
 
-    el.ondragstart = (ev) => {
-      if (!name) return;
-      draggedPlayerName = name;
-      ev.dataTransfer.setData("text/plain", name);
-      ev.dataTransfer.effectAllowed = "move";
-    };
+      el.ondragstart = (ev) => {
+        if (!name) return;
+        draggedPlayerName = name;
+        ev.dataTransfer.setData("text/plain", name);
+        ev.dataTransfer.effectAllowed = "move";
+      };
+      el.ondragend = () => { draggedPlayerName = null; };
+    } else {
+      el.ondragstart = null;
+      el.ondragend = null;
+    }
 
+    // drop target behaviour
     el.ondragover = (ev) => {
-      ev.preventDefault(); // allow drop
+      ev.preventDefault();
+      el.classList.add("dragover");
       ev.dataTransfer.dropEffect = "move";
     };
+    el.ondragleave = () => el.classList.remove("dragover");
 
     el.ondrop = (ev) => {
       ev.preventDefault();
+      el.classList.remove("dragover");
       const droppedName = (ev.dataTransfer.getData("text/plain") || draggedPlayerName || "").trim();
       if (!droppedName) return;
-      handleDropSwap(el, droppedName);
+      handleDropOnTarget(el, droppedName);
     };
-
-    el.ondragend = () => { draggedPlayerName = null; };
   });
+}
+
+// General drop handler that supports:
+// - pitch<->pitch swaps
+// - bench -> pitch
+// - pitch -> bench placeholder (remove from pitch, leave empty slot)
+function handleDropOnTarget(targetEl, droppedName){
+  const seg = (currentSchedule && currentSchedule[selectedSegmentIndex]) ? currentSchedule[selectedSegmentIndex] : null;
+  const lineup = seg ? seg.lineup : window.builderLineup;
+
+  if (!lineup) return;
+
+  const fromSlot = findPlayerSlot(lineup, droppedName); // null => on bench
+  const tKind = targetEl.dataset.kind || "shirt";
+  const tArea = targetEl.dataset.area || "";
+  const tSlot = targetEl.dataset.slot || "";
+
+  // Dropping onto a pitch slot (placeholder or pitch shirt)
+  if (tArea === "pitch"){
+    const slot = (tKind === "pitchSlot") ? tSlot : (targetEl.dataset.slot || "");
+    if (!slot) return;
+
+    const targetName = (lineup[slot] || "").trim();
+
+    // If dropping the same player back onto their own slot, do nothing
+    if (fromSlot && fromSlot === slot) return;
+
+    // Place droppedName into that slot
+    lineup[slot] = droppedName;
+
+    // If dropped from another pitch slot, swap (or clear)
+    if (fromSlot){
+      lineup[fromSlot] = targetName || "";
+    } else {
+      // Dropped from bench: if there was someone in the target slot, they naturally fall to bench
+      // (we just removed them from pitch by overwriting the slot)
+    }
+
+    afterScheduleEdit([slot].concat(fromSlot ? [fromSlot] : []));
+    return;
+  }
+
+  // Dropping onto bench (shirt or placeholder) => remove from pitch if it was on pitch
+  if (tArea === "bench"){
+    if (fromSlot){
+      lineup[fromSlot] = "";
+      afterScheduleEdit([fromSlot]);
+    }
+    return;
+  }
 }
 
 // Swap logic: drop onto another shirt swaps them (pitch<->pitch or pitch<->bench)
@@ -2514,31 +2878,41 @@ function findPlayerSlot(lineup, name){
 
 // After any edit: rerender pitch+bench, keep dragging alive, and (optionally) update table
 function afterScheduleEdit(changedSlots = []){
-  // Make edits "stick" to end of the current 20-min block (e.g. 20-30 also affects 30-40)
-  propagateSlotsToEndOf20Block(selectedSegmentIndex, changedSlots);
+  const inScheduleMode = (currentSchedule && currentSchedule[selectedSegmentIndex]);
 
-  // Update glow (if you’re using it)
-  if (typeof rebuildGlowMapForSelectedInterval === "function") {
-    rebuildGlowMapForSelectedInterval();
+  if (inScheduleMode){
+    // Stick edits to end of 20-min block
+    propagateSlotsToEndOf20Block(selectedSegmentIndex, changedSlots);
+
+    // Update glow for currently selected boundary
+    if (typeof rebuildGlowMapForSelectedInterval === "function"){
+      rebuildGlowMapForSelectedInterval();
+    }
+
+    // Recompute minutes + refresh panels
+    if (typeof fillMinutesFromSchedule === "function") fillMinutesFromSchedule(currentSchedule);
+    if (typeof renderTable === "function") renderTable();
+    if (typeof renderLiveTotalsPanel === "function") renderLiveTotalsPanel();
+    if (typeof renderLiveSnapshotsPanel === "function") renderLiveSnapshotsPanel();
+
+    // Push interval changes into the middle column
+    if (typeof renderIntervalChangesPanel === "function") renderIntervalChangesPanel();
+
+    // Re-render pitch
+    const seg = currentSchedule[selectedSegmentIndex];
+    if (seg) renderPitchFromLineup(seg.lineup);
+  } else {
+    // Free-form builder mode (no schedule yet)
+    if (typeof renderPitchFromLineup === "function") renderPitchFromLineup(window.builderLineup);
   }
 
-  // Recompute minutes from the whole schedule + update table + live panel
-  if (typeof fillMinutesFromSchedule === "function") fillMinutesFromSchedule(currentSchedule);
-  if (typeof renderTable === "function") renderTable();
-  if (typeof renderLiveTotalsPanel === "function") renderLiveTotalsPanel();
-  if (typeof renderLiveSnapshotsPanel === "function") renderLiveSnapshotsPanel();
-
-  // Re-render pitch for the currently selected segment
-  const seg = currentSchedule?.[selectedSegmentIndex];
-  if (seg) renderPitchFromLineup(seg.lineup);
-
-  // Refresh any schedule UI blocks/tabs
-  if (typeof refreshScheduleViews === "function") refreshScheduleViews();
+  // Keep tabs in sync (if schedule exists)
   if (typeof renderPeriodTabs === "function") renderPeriodTabs();
 
   // Ensure drag never "locks"
   if (typeof enableDragEditForCurrentPeriod === "function") enableDragEditForCurrentPeriod();
 }
+
 
 function findSlotOfName(lineup, name){
   for (const slot of slots){
@@ -2668,9 +3042,7 @@ function findSlotOfName(lineup, name){
 
 
 function generateFullSchedule_impl(){
-  const out = document.getElementById("scheduleContainer");
-  out.style.display = "block";
-
+  // Keep bottom empty (nothing below the bench). Any errors go to errorBox.
   const demand = {};
   players.forEach(p => {
     demand[p.name] = {};
@@ -2682,20 +3054,12 @@ function generateFullSchedule_impl(){
   const gkPlayer = chooseLockedGK(demand);
   const gkName = gkPlayer?.name || null;
 
-  const errors = [];
-  const warnings = [];
-
-  if (!gkName) {
-    errors.push("No goalkeeper found (no player has GK minutes > 0).");
-  } else if ((demand[gkName]["GK"] || 0) !== 8) {
-    errors.push(`Goalkeeper is locked, but ${gkName} has ${(demand[gkName]["GK"]||0)*10} GK minutes (needs 80). Fix GK to exactly 80.`);
+  if (!gkName){
+    alert("No goalkeeper found (no player has GK minutes > 0).");
+    return;
   }
-
-  if (errors.length){
-    out.innerHTML =
-      `<h4>Interval Changes</h4><div class="warn">Errors (fix these in the minutes table):<ul>` +
-      errors.map(e => `<li>${escapeHtml(e)}</li>`).join("") +
-      `</ul></div>`;
+  if ((demand[gkName]["GK"] || 0) !== 8){
+    alert(`Goalkeeper is locked, but ${gkName} has ${(demand[gkName]["GK"]||0)*10} GK minutes (needs 80). Fix GK to exactly 80.`);
     return;
   }
 
@@ -2709,16 +3073,10 @@ function generateFullSchedule_impl(){
 
   let solved = solveFullMatchFromDemand(segments20, demand, gkName);
   if (!solved.ok){
-    warnings.push("Had to use 10-minute intervals to satisfy minute allocations.");
     solved = solveFullMatchFromDemand(segments10, demand, gkName);
   }
-
   if (!solved.ok){
-    out.innerHTML =
-      `<h4>Interval Changes</h4>` +
-      `<div class="warn">Errors (fix these in the minutes table):<ul>` +
-      `<li>${escapeHtml(solved.reason)}</li>` +
-      `</ul></div>`;
+    alert(solved.reason || "Could not build a valid schedule.");
     return;
   }
 
@@ -2726,50 +3084,22 @@ function generateFullSchedule_impl(){
     start: s.start, end: s.end, tickLen: s.tickLen,
     lineup: { ...s.lineup }
   }));
+
   selectedSegmentIndex = 0;
-  rebuildGlowMapForSelectedInterval();
   scheduleMode = "minutes";
   scheduleEditActive = true;
+
+  rebuildGlowMapForSelectedInterval();
   renderPeriodTabs();
 
-  const changes = buildChangeRows(currentSchedule);
-  const snapshotsHtml = renderLineupSnapshots(currentSchedule);
-  const editorHtml = renderScheduleEditor();
-
   renderLiveTotalsPanel();
+  renderIntervalChangesPanel();
   renderLiveSnapshotsPanel();
 
-  let html = `<div id="changesBlock"><h4>Interval Changes</h4>`;
-  html += `<div class="ok">Schedule built successfully. GK locked: <b>${escapeHtml(gkName)}</b></div>`;
-
-  if (warnings.length){
-    html += `<div class="orange"><b>Notes:</b><ul>` +
-      warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("") +
-      `</ul></div>`;
-  }
-  
-  html += `
-    <table>
-      <tr><th>Time</th><th>Subbed Off</th><th>Subbed On</th></tr>
-      ${changes.map(r => `
-        <tr>
-          <td><b>${r.time}'</b></td>
-          <td>${escapeHtml(r.off.join(", ") || "-")}</td>
-          <td>${escapeHtml(r.on.join(", ") || "-")}</td>
-        </tr>
-      `).join("")}
-    </table>
-  </div>
-  <div id="editorBlock">${editorHtml}</div>
-  <div id="snapshotsBlock">${snapshotsHtml}</div>
-  `;
-
-  out.innerHTML = html;
-
-  // Show the first period on the pitch and enable drag edit
   if (currentSchedule.length) renderPitchFromLineup(currentSchedule[0].lineup);
   enableDragEditForCurrentPeriod();
 }
+
 
 
   /* ======== PASTE THE ONE-PASTE BLOCK HERE (END) ======== */
@@ -3162,17 +3492,6 @@ afterScheduleEdit = function afterScheduleEdit(changedSlots = []){
   if (typeof enableDragEditForCurrentPeriod === "function") enableDragEditForCurrentPeriod();
 };
 
-// Ensure interval changes panel updates when switching tabs
-const _selectSegment_orig = selectSegment;
-selectSegment = function selectSegment(i){
-  selectedSegmentIndex = i;
-  rebuildGlowMapForSelectedInterval();
-  const seg = currentSchedule?.[selectedSegmentIndex];
-  if (seg) renderPitchFromLineup(seg.lineup);
-  renderIntervalChangesPanel();
-  renderLiveSnapshotsPanel();
-  enableDragEditForCurrentPeriod();
-};
 
 window.addEventListener("DOMContentLoaded", () => {
   try {
@@ -3195,36 +3514,3 @@ window.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
